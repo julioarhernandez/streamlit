@@ -165,13 +165,14 @@ attendance_df = pd.DataFrame(attendance_data)
 # Display the attendance table
 st.subheader("📊 Reporte diario de asistencia")
 
-# Add a metric for total attendance
-with st.container():
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
-    with col2:
-        st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
+if fecha_inicio == fecha_fin:
+    # Add a metric for total attendance only for date ranges
+    with st.container():
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
+        with col2:
+            st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
 
 # Display the attendance table without index
 st.dataframe(attendance_df, hide_index=True)
