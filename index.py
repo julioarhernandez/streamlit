@@ -104,10 +104,7 @@ st.title("📋 Seguimiento de Asistencia - JulioRodriguez")
 
 # Initialize session state for manual attendance changes if not exists
 if 'manual_attendance' not in st.session_state:
-    st.session_state.manual_attendance = {
-        'mañana': set(),
-        'tarde': set()
-    }
+    st.session_state.manual_attendance = {}
 
 # Get date input and format it as M-DD-YY
 fecha = st.date_input("Selecciona la fecha")
@@ -115,15 +112,27 @@ fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
 inicio_semana = fecha - timedelta(days=fecha.weekday())
 st.markdown(f"🗓️ Semana desde **{inicio_semana.month}-{inicio_semana.day}-{inicio_semana.year % 100}** hasta **{fecha.month}-{fecha.day}-{fecha.year % 100}**")
 
+# Get base attendance data
 residentes = cargar_lista_residentes()
-
-# Get attendance from files
 asistentes_manana, asistentes_tarde = asistencia_dia(fecha_str)
-    
+
 # Create a copy of residentes to modify
 residentes_editados = residentes.copy()
+
+# Get file-based attendance
 residentes_editados["mañana"] = residentes_editados["nombre"].isin(asistentes_manana)
 residentes_editados["tarde"] = residentes_editados["nombre"].isin(asistentes_tarde)
+
+# Get manual attendance for this date
+if fecha_str not in st.session_state.manual_attendance:
+    st.session_state.manual_attendance[fecha_str] = {
+        'mañana': set(),
+        'tarde': set()
+    }
+else:
+    # Apply existing manual attendance for this date
+    residentes_editados["mañana"] = residentes_editados["mañana"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['mañana'])
+    residentes_editados["tarde"] = residentes_editados["tarde"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['tarde'])
 
 # Mostrar checkboxes editables para hoy
 residentes_editados = st.data_editor(
@@ -131,13 +140,15 @@ residentes_editados = st.data_editor(
     num_rows="dynamic"
 )
 
-# Update session state with manual changes
+# Update session state with manual changes for this date
 manual_manana = set(residentes_editados[residentes_editados["mañana"]]["nombre"])
 manual_tarde = set(residentes_editados[residentes_editados["tarde"]]["nombre"])
     
 # Update session state with changes
-st.session_state.manual_attendance['mañana'] = manual_manana
-st.session_state.manual_attendance['tarde'] = manual_tarde
+st.session_state.manual_attendance[fecha_str] = {
+    'mañana': manual_manana,
+    'tarde': manual_tarde
+}
 
 # Calculate attendance totals including manual changes
 total_manana = len(manual_manana)
