@@ -126,6 +126,9 @@ asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin)
 # Create a copy of residentes to modify
 residentes_editados = residentes.copy()
 
+# Create a DataFrame to store daily attendance
+attendance_data = []
+
 # Get attendance for each date in the range
 for fecha in pd.date_range(fecha_inicio, fecha_fin):
     fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
@@ -145,28 +148,46 @@ for fecha in pd.date_range(fecha_inicio, fecha_fin):
     # Apply manual attendance
     residentes_editados[f"mañana_{fecha_str}"] = residentes_editados[f"mañana_{fecha_str}"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['mañana'])
     residentes_editados[f"tarde_{fecha_str}"] = residentes_editados[f"tarde_{fecha_str}"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['tarde'])
-
-# Display attendance for each date in the range
-for fecha in pd.date_range(fecha_inicio, fecha_fin):
-    fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
     
     # Get attendance totals for this date
     total_manana = len(residentes_editados[residentes_editados[f"mañana_{fecha_str}"]])
     total_tarde = len(residentes_editados[residentes_editados[f"tarde_{fecha_str}"]])
     
-    # Display attendance totals for this date
+    # Add to attendance data
+    attendance_data.append({
+        'Día': fecha.strftime('%A'),  # Get day name (e.g., 'Monday', 'Tuesday', etc.)
+        'Fecha': fecha_str,
+        'Mañana': total_manana,
+        'Tarde': total_tarde
+    })
+
+# Create a DataFrame for the attendance table
+attendance_df = pd.DataFrame(attendance_data)
+
+# Display the attendance table
+st.subheader("📊 Reporte diario de asistencia")
+
+# Add a metric for total attendance
+with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(f"Mañana {fecha_str}", f"{total_manana}")
+        st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
     with col2:
-        st.metric(f"Tarde {fecha_str}", f"{total_tarde}")
+        st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
+
+# Display the attendance table without index
+st.dataframe(attendance_df, hide_index=True)
 
 # Show checkboxes for the last date in the range to allow manual changes
 fecha_actual_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
-residentes_editados = st.data_editor(
-    residentes_editados[["nombre", f"mañana_{fecha_actual_str}", f"tarde_{fecha_actual_str}"]], 
-    num_rows="dynamic"
-)
+
+# Display the data editor in a container with a title
+with st.container():
+    st.subheader(f"✏️ Asistencia para {fecha_actual_str}")
+    residentes_editados = st.data_editor(
+        residentes_editados[["nombre", f"mañana_{fecha_actual_str}", f"tarde_{fecha_actual_str}"]], 
+        num_rows="dynamic"
+    )
 
 # Update session state with manual changes for the last date
 manual_manana = set(residentes_editados[residentes_editados[f"mañana_{fecha_actual_str}"]]["nombre"])
