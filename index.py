@@ -9,6 +9,21 @@ from copy import deepcopy
 CARPETA_ONEDRIVE = r"C:\Users\JulioRodriguez\OneDrive - InterAmerican Technical Institute\Attendance"
 ARCHIVO_RESIDENTES = "residentes.csv"
 
+def format_date(fecha, separator='-'):
+    """
+    Format a date object as 'MM-DD-YY' or 'MM/DD/YY'.
+    
+    Args:
+        fecha: datetime.date object
+        separator: Either '-' or '/' to separate date components
+        
+    Returns:
+        str: Formatted date string
+    """
+    if separator not in ('-', '/'):
+        raise ValueError("Separator must be either '-' or '/'")
+    return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
+
 def cargar_lista_residentes():
     path_residentes = os.path.join(CARPETA_ONEDRIVE, ARCHIVO_RESIDENTES)
     return pd.read_csv(path_residentes)
@@ -179,12 +194,19 @@ st.dataframe(attendance_df, hide_index=True)
 
 # Show checkboxes for the last date in the range to allow manual changes
 fecha_actual_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
+fecha_actual_slash = format_date(fecha_fin, '/')
+
 
 # Display the data editor in a container with a title
 with st.container():
-    st.subheader(f"✏️ Asistencia para {fecha_actual_str}")
+    st.subheader(f"✏️ Asistencia para {fecha_actual_slash}")
     residentes_editados = st.data_editor(
         residentes_editados[["nombre", f"mañana_{fecha_actual_str}", f"tarde_{fecha_actual_str}"]], 
+        column_config={
+            "nombre": "Nombre",
+            f"mañana_{fecha_actual_str}": "Mañana",
+            f"tarde_{fecha_actual_str}": "Tarde"
+        },
         num_rows="dynamic"
     )
 
