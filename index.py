@@ -180,7 +180,19 @@ residentes_editados["asistió_semana"] = residentes_editados["nombre"].isin(asis
 
 # Mostrar reporte de ausentes semanales
 st.subheader("📉 Estudiantes sin asistencia esta semana")
+
+# Get the list of absent students first
 ausentes = residentes_editados[~residentes_editados["asistió_semana"]][["nombre"]]
+
+# Calculate total absent students
+num_ausentes = len(ausentes)
+
+# Display total absent students in a metric
+col1 = st.columns(1)[0]
+with col1:
+    st.metric("Total ausentes", f"{num_ausentes}")
+
+# Show the list of absent students
 st.dataframe(ausentes)
 
 # Descargar Excel con ausentes
