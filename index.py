@@ -100,69 +100,85 @@ def asistencia_semana(desde, hasta):
     return asistencias
 
 # --- UI ---
-st.title("📋 Seguimiento de Asistencia - JulioRodriguez")
+st.title("📋 Seguimiento de Asistencia - Curso de CBA")
 
 # Initialize session state for manual attendance changes if not exists
 if 'manual_attendance' not in st.session_state:
     st.session_state.manual_attendance = {}
 
-# Get date input and format it as M-DD-YY
-fecha = st.date_input("Selecciona la fecha")
-fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
-inicio_semana = fecha - timedelta(days=fecha.weekday())
-st.markdown(f"🗓️ Semana desde **{inicio_semana.month}-{inicio_semana.day}-{inicio_semana.year % 100}** hasta **{fecha.month}-{fecha.day}-{fecha.year % 100}**")
+# Get date range input
+col1, col2 = st.columns(2)
+with col1:
+    fecha_inicio = st.date_input("Fecha de inicio")
+with col2:
+    fecha_fin = st.date_input("Fecha de fin")
+
+# Format dates as M-DD-YY
+fecha_inicio_str = f"{fecha_inicio.month}-{fecha_inicio.day}-{fecha_inicio.year % 100}"
+fecha_fin_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
 
 # Get base attendance data
 residentes = cargar_lista_residentes()
-asistentes_manana, asistentes_tarde = asistencia_dia(fecha_str)
+
+# Get attendance for the selected date range
+asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin)
 
 # Create a copy of residentes to modify
 residentes_editados = residentes.copy()
 
-# Get file-based attendance
-residentes_editados["mañana"] = residentes_editados["nombre"].isin(asistentes_manana)
-residentes_editados["tarde"] = residentes_editados["nombre"].isin(asistentes_tarde)
+# Get attendance for each date in the range
+for fecha in pd.date_range(fecha_inicio, fecha_fin):
+    fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
+    asistentes_manana, asistentes_tarde = asistencia_dia(fecha_str)
+    
+    # Get manual attendance for this date
+    if fecha_str not in st.session_state.manual_attendance:
+        st.session_state.manual_attendance[fecha_str] = {
+            'mañana': set(),
+            'tarde': set()
+        }
+    
+    # Apply file-based attendance
+    residentes_editados[f"mañana_{fecha_str}"] = residentes_editados["nombre"].isin(asistentes_manana)
+    residentes_editados[f"tarde_{fecha_str}"] = residentes_editados["nombre"].isin(asistentes_tarde)
+    
+    # Apply manual attendance
+    residentes_editados[f"mañana_{fecha_str}"] = residentes_editados[f"mañana_{fecha_str}"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['mañana'])
+    residentes_editados[f"tarde_{fecha_str}"] = residentes_editados[f"tarde_{fecha_str}"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['tarde'])
 
-# Get manual attendance for this date
-if fecha_str not in st.session_state.manual_attendance:
-    st.session_state.manual_attendance[fecha_str] = {
-        'mañana': set(),
-        'tarde': set()
-    }
-else:
-    # Apply existing manual attendance for this date
-    residentes_editados["mañana"] = residentes_editados["mañana"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['mañana'])
-    residentes_editados["tarde"] = residentes_editados["tarde"] | residentes_editados["nombre"].isin(st.session_state.manual_attendance[fecha_str]['tarde'])
+# Display attendance for each date in the range
+for fecha in pd.date_range(fecha_inicio, fecha_fin):
+    fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
+    
+    # Get attendance totals for this date
+    total_manana = len(residentes_editados[residentes_editados[f"mañana_{fecha_str}"]])
+    total_tarde = len(residentes_editados[residentes_editados[f"tarde_{fecha_str}"]])
+    
+    # Display attendance totals for this date
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(f"Mañana {fecha_str}", f"{total_manana}")
+    with col2:
+        st.metric(f"Tarde {fecha_str}", f"{total_tarde}")
 
-# Mostrar checkboxes editables para hoy
+# Show checkboxes for the last date in the range to allow manual changes
+fecha_actual_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
 residentes_editados = st.data_editor(
-    residentes_editados[["nombre", "mañana", "tarde"]], 
+    residentes_editados[["nombre", f"mañana_{fecha_actual_str}", f"tarde_{fecha_actual_str}"]], 
     num_rows="dynamic"
 )
 
-# Update session state with manual changes for this date
-manual_manana = set(residentes_editados[residentes_editados["mañana"]]["nombre"])
-manual_tarde = set(residentes_editados[residentes_editados["tarde"]]["nombre"])
+# Update session state with manual changes for the last date
+manual_manana = set(residentes_editados[residentes_editados[f"mañana_{fecha_actual_str}"]]["nombre"])
+manual_tarde = set(residentes_editados[residentes_editados[f"tarde_{fecha_actual_str}"]]["nombre"])
     
 # Update session state with changes
-st.session_state.manual_attendance[fecha_str] = {
+st.session_state.manual_attendance[fecha_actual_str] = {
     'mañana': manual_manana,
     'tarde': manual_tarde
 }
 
-# Calculate attendance totals including manual changes
-total_manana = len(manual_manana)
-total_tarde = len(manual_tarde)
-
-# Display attendance totals
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Mañana", f"{total_manana}")
-with col2:
-    st.metric("Tarde", f"{total_tarde}")
-
-# Get attendance for the week (from files)
-asistencias_por_dia = asistencia_semana(inicio_semana, fecha)
+# Get attendance for the selected date range
 asistencia_total = set()
 for asistencia_manana, asistencia_tarde in asistencias_por_dia:
     asistencia_total.update(asistencia_manana)
