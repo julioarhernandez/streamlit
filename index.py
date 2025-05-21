@@ -20,7 +20,7 @@ def buscar_archivos_asistencia(fecha_str, tipo="Tarde"):
     archivos = glob.glob(ruta)
     
     # Add debug logging
-    st.write(f"Searching for pattern: {patron}")
+    # st.write(f"Searching for pattern: {patron}")
     # st.write(f"Found files: {archivos}")
     
     return archivos
@@ -52,7 +52,7 @@ def extraer_participantes(archivo):
         # Filter out organizers and get unique names
         df_filtered = df[df['Role'] != 'Organizer']
         participantes = df_filtered["Name"].dropna().unique()
-        st.write(f"Filtered participants: {participantes}")
+        # st.write(f"Filtered participants: {participantes}")
         
         return participantes
     except Exception as e:
@@ -88,15 +88,13 @@ def asistencia_semana(desde, hasta):
     for dia in dias:
         # Format date as M-DD-YY (single digit month)
         fecha_str = f"{dia.month}-{dia.day}-{dia.year % 100}"
-        st.write(f"Processing date: {fecha_str}")
+        # st.write(f"Processing date: {fecha_str}")
         
         # Get attendance for this date
         asistencia_manana, asistencia_tarde = asistencia_dia(fecha_str)
         asistencias.append((asistencia_manana, asistencia_tarde))
         
-        # Debug logging
-        st.write(f"Morning attendance for {fecha_str}: {len(asistencia_manana)}")
-        st.write(f"Evening attendance for {fecha_str}: {len(asistencia_tarde)}")
+
     return asistencias
 
 # --- UI ---
@@ -216,7 +214,7 @@ residentes_editados["asistió_semana"] = residentes_editados["nombre"].isin(asis
     residentes_editados["nombre"].isin(manual_tarde)
 
 # Mostrar reporte de ausentes semanales
-st.subheader("📉 Estudiantes sin asistencia esta semana")
+st.subheader("📉 Estudiantes sin asistencia este rango de fecha")
 
 # Get the list of absent students first
 ausentes = residentes_editados[~residentes_editados["asistió_semana"]][["nombre"]]
