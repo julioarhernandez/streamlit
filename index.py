@@ -128,7 +128,13 @@ with col1:
 with col2:
     fecha_fin = st.date_input("Fecha de fin")
 with col3:
-    skip_weekends = st.checkbox("Omitir fines de semana", value=True, help="Si está marcado, no se incluirán sábados ni domingos")
+    # Checkbox for weekend filtering
+    skip_weekends = st.checkbox(
+        "Omitir fines de semana", 
+        value=True,
+        help="Si está marcado, no se incluirán sábados ni domingos",
+        key="skip_weekends"
+    )
 
 # Format dates as M-DD-YY
 fecha_inicio_str = f"{fecha_inicio.month}-{fecha_inicio.day}-{fecha_inicio.year % 100}"
@@ -149,7 +155,7 @@ attendance_data = []
 # Get attendance for each date in the range
 for fecha in pd.date_range(fecha_inicio, fecha_fin):
     # Skip weekends if the checkbox is checked
-    if skip_weekends and fecha.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+    if st.session_state.skip_weekends and fecha.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
         continue
         
     fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
