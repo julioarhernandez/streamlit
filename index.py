@@ -211,308 +211,309 @@ def initialize_attendance_for_date(fecha, residentes_df, uploaded_files=None):
     return attendance_key
 
 # --- UI ---
-st.title("📋 Seguimiento de Asistencia")
+if st.session_state.logged_in:
+    st.title("📋 Seguimiento de Asistencia")
 
-# Initialize session state for file uploads
-if 'residentes_uploaded' not in st.session_state:
-    st.session_state.residentes_uploaded = False
-if 'asistencia_uploaded' not in st.session_state:
-    st.session_state.asistencia_uploaded = False
-if 'residentes_file' not in st.session_state:
-    st.session_state.residentes_file = None
-if 'asistencia_files' not in st.session_state:
-    st.session_state.asistencia_files = []
-
-# Check if both files are uploaded
-files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
-st.session_state.files_uploaded = files_uploaded
-
-st.header("1. Cargar Archivos")
-
-# Collapsible file upload section
-with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("files_uploaded", False)):
-    # Upload resident list
-    uploaded_residentes = st.file_uploader(
-        "📝 Lista de Estudiantes (CSV)",
-        type=["csv"],
-        help="Sube el archivo CSV con la lista de Estudiantes",
-        key="residentes_uploader"
-    )
-
-    # Upload attendance files
-    uploaded_files = st.file_uploader(
-        "📊 Archivos de asistencia",
-        type=["csv"],
-        accept_multiple_files=True,
-        help="Sube los archivos de asistencia exportados de Zoom",
-        key="asistencia_uploader"
-    )
-
-    # Update session state when files are uploaded
-    if uploaded_residentes is not None:
-        st.session_state.residentes_uploaded = True
-        st.session_state.residentes_file = uploaded_residentes
-    else:
+    # Initialize session state for file uploads
+    if 'residentes_uploaded' not in st.session_state:
         st.session_state.residentes_uploaded = False
-        st.session_state.residentes_file = None
-
-    if uploaded_files and len(uploaded_files) > 0:
-        st.session_state.asistencia_uploaded = True
-        st.session_state.asistencia_files = uploaded_files
-    else:
+    if 'asistencia_uploaded' not in st.session_state:
         st.session_state.asistencia_uploaded = False
+    if 'residentes_file' not in st.session_state:
+        st.session_state.residentes_file = None
+    if 'asistencia_files' not in st.session_state:
         st.session_state.asistencia_files = []
 
-    # Show current resident file info
-    current_resident_file = obtener_nombre_archivo_residentes()
-    if current_resident_file != "No se ha cargado ningún archivo":
-        st.success(f"✅ Archivo cargado: {current_resident_file}")
-        if st.button("🗑️ Limpiar archivo de Estudiantes"):
-            st.session_state.residentes_df = pd.DataFrame()
-            st.session_state.residentes_filename = None
+    # Check if both files are uploaded
+    files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
+    st.session_state.files_uploaded = files_uploaded
+
+    st.header("1. Cargar Archivos")
+
+    # Collapsible file upload section
+    with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("files_uploaded", False)):
+        # Upload resident list
+        uploaded_residentes = st.file_uploader(
+            "📝 Lista de Estudiantes (CSV)",
+            type=["csv"],
+            help="Sube el archivo CSV con la lista de Estudiantes",
+            key="residentes_uploader"
+        )
+
+        # Upload attendance files
+        uploaded_files = st.file_uploader(
+            "📊 Archivos de asistencia",
+            type=["csv"],
+            accept_multiple_files=True,
+            help="Sube los archivos de asistencia exportados de Zoom",
+            key="asistencia_uploader"
+        )
+
+        # Update session state when files are uploaded
+        if uploaded_residentes is not None:
+            st.session_state.residentes_uploaded = True
+            st.session_state.residentes_file = uploaded_residentes
+        else:
             st.session_state.residentes_uploaded = False
-            st.rerun()
+            st.session_state.residentes_file = None
 
-# Update overall flag
-st.session_state.files_uploaded = (
-    st.session_state.residentes_uploaded and st.session_state.asistencia_uploaded
-)
-    
+        if uploaded_files and len(uploaded_files) > 0:
+            st.session_state.asistencia_uploaded = True
+            st.session_state.asistencia_files = uploaded_files
+        else:
+            st.session_state.asistencia_uploaded = False
+            st.session_state.asistencia_files = []
 
-# Show warning if files are missing
-if not st.session_state.files_uploaded:
-    st.warning("Por favor, sube ambos archivos para habilitar la aplicación")
-    st.stop()
+        # Show current resident file info
+        current_resident_file = obtener_nombre_archivo_residentes()
+        if current_resident_file != "No se ha cargado ningún archivo":
+            st.success(f"✅ Archivo cargado: {current_resident_file}")
+            if st.button("🗑️ Limpiar archivo de Estudiantes"):
+                st.session_state.residentes_df = pd.DataFrame()
+                st.session_state.residentes_filename = None
+                st.session_state.residentes_uploaded = False
+                st.rerun()
 
-# Initialize only if not exists
-if 'rango_fechas' not in st.session_state:
-    st.session_state.rango_fechas = True
+    # Update overall flag
+    st.session_state.files_uploaded = (
+        st.session_state.residentes_uploaded and st.session_state.asistencia_uploaded
+    )
+        
 
-st.header("2. Seleccionar Rango de Fechas")
+    # Show warning if files are missing
+    if not st.session_state.files_uploaded:
+        st.warning("Por favor, sube ambos archivos para habilitar la aplicación")
+        st.stop()
 
-# Get date range input
-col1, col2 = st.columns(2)
-with col1:
-    fecha_inicio = st.date_input(
-        "Fecha de inicio",
+    # Initialize only if not exists
+    if 'rango_fechas' not in st.session_state:
+        st.session_state.rango_fechas = True
+
+    st.header("2. Seleccionar Rango de Fechas")
+
+    # Get date range input
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input(
+            "Fecha de inicio",
+            disabled=not st.session_state.files_uploaded,
+            help="Selecciona la fecha de inicio del rango"
+        )
+
+    # Only show end date if range is enabled
+    with col2:
+        if st.session_state.rango_fechas:
+            # Set minimum date to be one day after fecha_inicio
+            min_date = fecha_inicio + timedelta(days=1)
+            fecha_fin = st.date_input(
+                "Fecha de fin",
+                min_value=min_date,
+                value=min_date,
+                disabled=not st.session_state.files_uploaded,
+                help="La fecha de fin debe ser posterior a la fecha de inicio"
+            )
+        else:
+            fecha_fin = fecha_inicio  # Use start date as end date
+
+    # Date range checkbox
+    st.checkbox(
+        "Rango de fechas",
+        key='rango_fechas',
         disabled=not st.session_state.files_uploaded,
-        help="Selecciona la fecha de inicio del rango"
+        help="Marcar para seleccionar un rango de fechas, desmarcar para una sola fecha"
     )
 
-# Only show end date if range is enabled
-with col2:
-    if st.session_state.rango_fechas:
-        # Set minimum date to be one day after fecha_inicio
-        min_date = fecha_inicio + timedelta(days=1)
-        fecha_fin = st.date_input(
-            "Fecha de fin",
-            min_value=min_date,
-            value=min_date,
-            disabled=not st.session_state.files_uploaded,
-            help="La fecha de fin debe ser posterior a la fecha de inicio"
-        )
-    else:
-        fecha_fin = fecha_inicio  # Use start date as end date
+    # Checkbox for weekend filtering
+    skip_weekends = st.checkbox(
+        "Omitir fines de semana", 
+        value=True,
+        disabled=not st.session_state.files_uploaded,
+        help="Si está marcado, no se incluirán sábados ni domingos",
+        key="skip_weekends"
+    )
 
-# Date range checkbox
-st.checkbox(
-    "Rango de fechas",
-    key='rango_fechas',
-    disabled=not st.session_state.files_uploaded,
-    help="Marcar para seleccionar un rango de fechas, desmarcar para una sola fecha"
-)
+    # Load resident data
+    residentes = cargar_lista_residentes(uploaded_residentes)
 
-# Checkbox for weekend filtering
-skip_weekends = st.checkbox(
-    "Omitir fines de semana", 
-    value=True,
-    disabled=not st.session_state.files_uploaded,
-    help="Si está marcado, no se incluirán sábados ni domingos",
-    key="skip_weekends"
-)
+    # Show warning if no resident data is available
+    if residentes.empty:
+        st.warning("Por favor, sube el archivo con la lista de Estudiantes")
+        st.stop()
 
-# Load resident data
-residentes = cargar_lista_residentes(uploaded_residentes)
+    # Store in session for faster access
+    st.session_state.residentes_df = residentes
 
-# Show warning if no resident data is available
-if residentes.empty:
-    st.warning("Por favor, sube el archivo con la lista de Estudiantes")
-    st.stop()
+    # Get attendance for the selected date range
+    asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin, uploaded_files, st.session_state.skip_weekends)
 
-# Store in session for faster access
-st.session_state.residentes_df = residentes
+    # Create a DataFrame to store daily attendance
+    attendance_data = []
 
-# Get attendance for the selected date range
-asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin, uploaded_files, st.session_state.skip_weekends)
-
-# Create a DataFrame to store daily attendance
-attendance_data = []
-
-# Get attendance for each date in the range
-for i, fecha in enumerate(pd.date_range(fecha_inicio, fecha_fin)):
-    # Skip weekends if the checkbox is checked
-    if st.session_state.skip_weekends and fecha.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-        continue
-        
-    fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
-    
-    # Get attendance from the pre-calculated data
-    if i < len(asistencias_por_dia):
-        asistentes_manana, asistentes_tarde = asistencias_por_dia[i]
-        total_manana = len(asistentes_manana)
-        total_tarde = len(asistentes_tarde)
-    else:
-        total_manana = 0
-        total_tarde = 0
-    
-    # Map day names to Spanish
-    dias_semana = {
-        'Monday': 'Lunes',
-        'Tuesday': 'Martes',
-        'Wednesday': 'Miércoles',
-        'Thursday': 'Jueves',
-        'Friday': 'Viernes',
-        'Saturday': 'Sábado',
-        'Sunday': 'Domingo'
-    }
-    
-    # Add to attendance data
-    dia_nombre = dias_semana[fecha.strftime('%A')]
-    attendance_data.append({
-        'Día': dia_nombre,
-        'Fecha': fecha_str,
-        'Mañana': total_manana,
-        'Tarde': total_tarde
-    })
-
-# Create a DataFrame for the attendance table
-attendance_df = pd.DataFrame(attendance_data)
-
-st.header("3. Reportes")
-
-
-# Display the attendance table
-st.subheader("📊 Reporte diario de asistencia")
-
-# Show total attendance metrics only if it not a range of dates
-if fecha_inicio == fecha_fin:
-    # Add a metric for total attendance only for single dates
-    with st.container():
-        col1, col2, _ = st.columns([2, 2, 6])
-        with col1:
-            st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
-        with col2:
-            st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
-
-# Display the attendance table without index
-st.dataframe(attendance_df, hide_index=True)
-
-# ATTENDANCE EDITOR - Only for the last date in range
-fecha_actual_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
-fecha_actual_slash = format_date(fecha_fin, '/')
-
-# Initialize attendance state for this date
-attendance_key = initialize_attendance_for_date(fecha_fin, residentes, uploaded_files)
-
-# Create DataFrame for the editor using session state - FIXED VERSION
-editor_data = []
-if attendance_key in st.session_state and st.session_state[attendance_key]:
-    for nombre in st.session_state[attendance_key]:
-        editor_data.append({
-            'nombre': nombre,
-            'mañana': st.session_state[attendance_key][nombre]['mañana'],
-            'tarde': st.session_state[attendance_key][nombre]['tarde']
-        })
-else:
-    # Fallback: create editor data from residentes if attendance state is empty
-    for _, row in residentes.iterrows():
-        nombre = row["nombre"]
-        editor_data.append({
-            'nombre': nombre,
-            'mañana': False,
-            'tarde': False
-        })
-
-editor_df = pd.DataFrame(editor_data)
-
-# Display the editor if it is not a range of dates
-if fecha_inicio == fecha_fin:
-    with st.container():
-        st.subheader(f"✏️ Asistencia para {fecha_actual_slash}")
-    
-    # Only show editor if we have data
-    if not editor_df.empty:
-        # Use a unique key that includes date to avoid conflicts
-        editor_key = f"editor_{fecha_actual_str}_{hash(str(fecha_fin))}"
-        
-        edited_df = st.data_editor(
-            editor_df,
-            column_config={
-                "nombre": st.column_config.TextColumn("Nombre", disabled=True),
-                "mañana": st.column_config.CheckboxColumn("Mañana"),
-                "tarde": st.column_config.CheckboxColumn("Tarde")
-            },
-            disabled=["nombre"],
-            hide_index=True,
-            key=editor_key,
-            use_container_width=True
-        )
-        
-        # Update session state with changes - FIXED VERSION
-        if edited_df is not None and not edited_df.empty:
-            # Ensure attendance_key exists in session state
-            if attendance_key not in st.session_state:
-                st.session_state[attendance_key] = {}
+    # Get attendance for each date in the range
+    for i, fecha in enumerate(pd.date_range(fecha_inicio, fecha_fin)):
+        # Skip weekends if the checkbox is checked
+        if st.session_state.skip_weekends and fecha.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            continue
             
-            # Update each row
-            for _, row in edited_df.iterrows():
-                nombre = row["nombre"]
-                st.session_state[attendance_key][nombre] = {
-                    'mañana': bool(row['mañana']),
-                    'tarde': bool(row['tarde'])
-                }
+        fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
+        
+        # Get attendance from the pre-calculated data
+        if i < len(asistencias_por_dia):
+            asistentes_manana, asistentes_tarde = asistencias_por_dia[i]
+            total_manana = len(asistentes_manana)
+            total_tarde = len(asistentes_tarde)
+        else:
+            total_manana = 0
+            total_tarde = 0
+        
+        # Map day names to Spanish
+        dias_semana = {
+            'Monday': 'Lunes',
+            'Tuesday': 'Martes',
+            'Wednesday': 'Miércoles',
+            'Thursday': 'Jueves',
+            'Friday': 'Viernes',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        
+        # Add to attendance data
+        dia_nombre = dias_semana[fecha.strftime('%A')]
+        attendance_data.append({
+            'Día': dia_nombre,
+            'Fecha': fecha_str,
+            'Mañana': total_manana,
+            'Tarde': total_tarde
+        })
+
+    # Create a DataFrame for the attendance table
+    attendance_df = pd.DataFrame(attendance_data)
+
+    st.header("3. Reportes")
+
+
+    # Display the attendance table
+    st.subheader("📊 Reporte diario de asistencia")
+
+    # Show total attendance metrics only if it not a range of dates
+    if fecha_inicio == fecha_fin:
+        # Add a metric for total attendance only for single dates
+        with st.container():
+            col1, col2, _ = st.columns([2, 2, 6])
+            with col1:
+                st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
+            with col2:
+                st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
+
+    # Display the attendance table without index
+    st.dataframe(attendance_df, hide_index=True)
+
+    # ATTENDANCE EDITOR - Only for the last date in range
+    fecha_actual_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
+    fecha_actual_slash = format_date(fecha_fin, '/')
+
+    # Initialize attendance state for this date
+    attendance_key = initialize_attendance_for_date(fecha_fin, residentes, uploaded_files)
+
+    # Create DataFrame for the editor using session state - FIXED VERSION
+    editor_data = []
+    if attendance_key in st.session_state and st.session_state[attendance_key]:
+        for nombre in st.session_state[attendance_key]:
+            editor_data.append({
+                'nombre': nombre,
+                'mañana': st.session_state[attendance_key][nombre]['mañana'],
+                'tarde': st.session_state[attendance_key][nombre]['tarde']
+            })
     else:
-        st.warning("No hay datos de estudiantes para mostrar. Verifica que el archivo de Estudiantes esté cargado correctamente.")
+        # Fallback: create editor data from residentes if attendance state is empty
+        for _, row in residentes.iterrows():
+            nombre = row["nombre"]
+            editor_data.append({
+                'nombre': nombre,
+                'mañana': False,
+                'tarde': False
+            })
 
-# Calculate who attended during the entire range (including manual edits)
-asistencia_total = set()
+    editor_df = pd.DataFrame(editor_data)
 
-# Add from file-based attendance
-for asistencia_manana, asistencia_tarde in asistencias_por_dia:
-    asistencia_total.update(asistencia_manana)
-    asistencia_total.update(asistencia_tarde)
+    # Display the editor if it is not a range of dates
+    if fecha_inicio == fecha_fin:
+        with st.container():
+            st.subheader(f"✏️ Asistencia para {fecha_actual_slash}")
+        
+        # Only show editor if we have data
+        if not editor_df.empty:
+            # Use a unique key that includes date to avoid conflicts
+            editor_key = f"editor_{fecha_actual_str}_{hash(str(fecha_fin))}"
+            
+            edited_df = st.data_editor(
+                editor_df,
+                column_config={
+                    "nombre": st.column_config.TextColumn("Nombre", disabled=True),
+                    "mañana": st.column_config.CheckboxColumn("Mañana"),
+                    "tarde": st.column_config.CheckboxColumn("Tarde")
+                },
+                disabled=["nombre"],
+                hide_index=True,
+                key=editor_key,
+                use_container_width=True
+            )
+            
+            # Update session state with changes - FIXED VERSION
+            if edited_df is not None and not edited_df.empty:
+                # Ensure attendance_key exists in session state
+                if attendance_key not in st.session_state:
+                    st.session_state[attendance_key] = {}
+                
+                # Update each row
+                for _, row in edited_df.iterrows():
+                    nombre = row["nombre"]
+                    st.session_state[attendance_key][nombre] = {
+                        'mañana': bool(row['mañana']),
+                        'tarde': bool(row['tarde'])
+                    }
+        else:
+            st.warning("No hay datos de estudiantes para mostrar. Verifica que el archivo de Estudiantes esté cargado correctamente.")
 
-# Add from manual attendance for the current date being edited
-if attendance_key in st.session_state and st.session_state[attendance_key]:
-    for nombre in st.session_state[attendance_key]:
-        if (st.session_state[attendance_key][nombre]['mañana'] or 
-            st.session_state[attendance_key][nombre]['tarde']):
-            asistencia_total.add(nombre)
+    # Calculate who attended during the entire range (including manual edits)
+    asistencia_total = set()
 
-# Create the final attendance status
-residentes_con_asistencia = residentes.copy()
-residentes_con_asistencia["asistió_semana"] = residentes_con_asistencia["nombre"].isin(asistencia_total)
+    # Add from file-based attendance
+    for asistencia_manana, asistencia_tarde in asistencias_por_dia:
+        asistencia_total.update(asistencia_manana)
+        asistencia_total.update(asistencia_tarde)
 
-# Show absent students report
-st.subheader("📉 Estudiantes sin asistencia este rango de fecha")
+    # Add from manual attendance for the current date being edited
+    if attendance_key in st.session_state and st.session_state[attendance_key]:
+        for nombre in st.session_state[attendance_key]:
+            if (st.session_state[attendance_key][nombre]['mañana'] or 
+                st.session_state[attendance_key][nombre]['tarde']):
+                asistencia_total.add(nombre)
 
-# Get the list of absent students
-ausentes = residentes_con_asistencia[~residentes_con_asistencia["asistió_semana"]][["nombre"]]
+    # Create the final attendance status
+    residentes_con_asistencia = residentes.copy()
+    residentes_con_asistencia["asistió_semana"] = residentes_con_asistencia["nombre"].isin(asistencia_total)
 
-# Calculate total absent students
-num_ausentes = len(ausentes)
+    # Show absent students report
+    st.subheader("📉 Estudiantes sin asistencia este rango de fecha")
 
-# Display total absent students in a metric
-col1 = st.columns(1)[0]
-with col1:
-    st.metric("Total ausentes", f"{num_ausentes}")
+    # Get the list of absent students
+    ausentes = residentes_con_asistencia[~residentes_con_asistencia["asistió_semana"]][["nombre"]]
 
-# Show the list of absent students
-st.dataframe(ausentes, hide_index=True)
+    # Calculate total absent students
+    num_ausentes = len(ausentes)
 
-# Download Excel with absent students
-if st.button("📥 Descargar reporte de ausentes"):
-    output = "ausentes_semana.xlsx"
-    ausentes.to_excel(output, index=False)
-    with open(output, "rb") as f:
-        st.download_button("Descargar Excel", f, output)
+    # Display total absent students in a metric
+    col1 = st.columns(1)[0]
+    with col1:
+        st.metric("Total ausentes", f"{num_ausentes}")
+
+    # Show the list of absent students
+    st.dataframe(ausentes, hide_index=True)
+
+    # Download Excel with absent students
+    if st.button("📥 Descargar reporte de ausentes"):
+        output = "ausentes_semana.xlsx"
+        ausentes.to_excel(output, index=False)
+        with open(output, "rb") as f:
+            st.download_button("Descargar Excel", f, output)
