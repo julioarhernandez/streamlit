@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_local_storage import LocalStorage
 import pandas as pd
 import os
 import glob
@@ -10,10 +9,6 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 import tempfile
 import uuid
 import json
-import base64
-
-# Initialize LocalStorage
-local_storage = LocalStorage()
 
 # Initialize session state for resident data
 if 'residentes_df' not in st.session_state:
@@ -36,51 +31,28 @@ def format_date(fecha, separator='-'):
     return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
 
 def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
-    """Carga la lista de residentes desde el archivo subido, local storage o desde la sesión"""
-    # Try to load from uploaded file first
+    """Carga la lista de residentes desde el archivo subido o desde la sesión"""
     if uploaded_file is not None:
         try:
             # Read the file
             df = pd.read_csv(uploaded_file)
-            # Save to session state
+            # Update session state
             st.session_state.residentes_df = df
             st.session_state.residentes_filename = uploaded_file.name
-            
-            # Save to local storage with unique keys
-            csv_data = df.to_csv(index=False)
-            local_storage.setItem('asistencia_residentes_csv', csv_data)
-            local_storage.setItem('asistencia_residentes_filename', uploaded_file.name)
-            
             return df
         except Exception as e:
             st.error(f"Error al cargar el archivo de residentes: {str(e)}")
             return pd.DataFrame()
     
-    # Try to load from session state
-    if not st.session_state.get('residentes_df', pd.DataFrame()).empty:
+    # Return from session state if available
+    if not st.session_state.residentes_df.empty:
         return st.session_state.residentes_df
-    
-    # Try to load from local storage
-    try:
-        stored_csv = local_storage.getItem('asistencia_residentes_csv')
-        if stored_csv and stored_csv != 'null':  # Check for 'null' string from localStorage
-            df = pd.read_csv(io.StringIO(stored_csv))
-            st.session_state.residentes_df = df
-            st.session_state.residentes_filename = local_storage.getItem('asistencia_residentes_filename') or "Archivo guardado"
-            return df
-    except Exception as e:
-        st.warning(f"No se pudo cargar el archivo guardado: {str(e)}")
     
     return pd.DataFrame()
 
 def obtener_nombre_archivo_residentes() -> str:
     """Obtiene el nombre del archivo de residentes guardado"""
-    filename = st.session_state.get('residentes_filename')
-    if not filename:
-        filename = local_storage.getItem('asistencia_residentes_filename')
-        if filename == 'null':  # Handle case where localStorage returns 'null' string
-            filename = None
-    return filename or "No se ha cargado ningún archivo"
+    return st.session_state.get('residentes_filename', "No se ha cargado ningún archivo")
 
 def procesar_archivo_asistencia(uploaded_file) -> List[str]:
     """Process an uploaded attendance file and return list of participants."""
@@ -256,9 +228,6 @@ with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("file
             st.session_state.residentes_df = pd.DataFrame()
             st.session_state.residentes_filename = None
             st.session_state.residentes_uploaded = False
-            # Clear from local storage
-            local_storage.deleteItem('asistencia_residentes_csv')
-            local_storage.deleteItem('asistencia_residentes_filename')
             st.rerun()
 
 # Update overall flag
