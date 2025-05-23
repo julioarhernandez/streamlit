@@ -256,10 +256,14 @@ with col1:
 # Only show end date if range is enabled
 with col2:
     if st.session_state.rango_fechas:
+        # Set minimum date to be one day after fecha_inicio
+        min_date = fecha_inicio + timedelta(days=1)
         fecha_fin = st.date_input(
             "Fecha de fin",
+            min_value=min_date,
+            value=min_date,
             disabled=not st.session_state.files_uploaded,
-            help="Selecciona la fecha de fin del rango"
+            help="La fecha de fin debe ser posterior a la fecha de inicio"
         )
     else:
         fecha_fin = fecha_inicio  # Use start date as end date
