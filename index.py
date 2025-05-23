@@ -9,11 +9,13 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 import tempfile
 import uuid
 import json
+import streamlit_authenticator as stauth
+import yaml
+from yaml.loader import SafeLoader
 
-# Initialize session state for resident data
-if 'residentes_df' not in st.session_state:
-    st.session_state.residentes_df = pd.DataFrame()
-    st.session_state.residentes_filename = None
+# Load credentials from YAML file
+with open('credentials.yaml', 'r') as f:
+    credentials = yaml.load(f, Loader=SafeLoader)
 
 def format_date(fecha, separator='-'):
     """
@@ -167,8 +169,49 @@ def initialize_attendance_for_date(fecha, residentes_df, uploaded_files=None):
     
     return attendance_key
 
-# --- UI ---
-st.title("📋 Seguimiento de Asistencia")
+# --- Authentication ---
+# Create authenticator object
+try:
+    authenticator = stauth.Authenticate(
+        credentials['credentials'],
+        credentials['cookie']['name'],
+        credentials['cookie']['key'],
+        credentials['cookie']['expiry_days'],
+        auto_hash=credentials.get('auto_hash', True)  # Enable auto-hashing
+    )
+except Exception as e:
+    st.error(f"Error initializing authenticator: {str(e)}")
+    st.stop()
+
+# Render the login widget
+try:
+    authenticator.login(
+        fields={'Form name': 'Iniciar sesión', 'Username': 'Usuario', 'Password': 'Contraseña', 'Login': 'Iniciar sesión'},
+        location='main',
+        key='login_form'
+    )
+    
+    # Check authentication status
+    if st.session_state["authentication_status"] is None:
+        st.warning('Por favor ingresa tu nombre de usuario y contraseña')
+        st.stop()
+    
+    if st.session_state["authentication_status"] is False:
+        st.error('Usuario/contraseña incorrectos')
+        st.stop()
+    
+    # If we get here, the user is authenticated
+    st.sidebar.title(f"Bienvenido, {st.session_state['name']}")
+    authenticator.logout('Cerrar sesión', 'sidebar', key='unique_logout')
+    
+except Exception as e:
+    st.error(f"Error en la autenticación: {str(e)}")
+    st.stop()
+
+# Initialize session state for resident data
+if 'residentes_df' not in st.session_state:
+    st.session_state.residentes_df = pd.DataFrame()
+    st.session_state.residentes_filename = None
 
 # Initialize session state for file uploads
 if 'residentes_uploaded' not in st.session_state:
@@ -179,6 +222,9 @@ if 'residentes_file' not in st.session_state:
     st.session_state.residentes_file = None
 if 'asistencia_files' not in st.session_state:
     st.session_state.asistencia_files = []
+
+# --- Main Application UI ---
+st.title("📋 Seguimiento de Asistencia")
 
 # Check if both files are uploaded
 files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
