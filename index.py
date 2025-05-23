@@ -5,9 +5,15 @@ import glob
 from datetime import datetime, timedelta
 import io
 from copy import deepcopy
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Union
 import tempfile
 import uuid
+import json
+
+# Initialize session state for resident data
+if 'residentes_df' not in st.session_state:
+    st.session_state.residentes_df = pd.DataFrame()
+    st.session_state.residentes_filename = None
 
 def format_date(fecha, separator='-'):
     """
@@ -25,9 +31,28 @@ def format_date(fecha, separator='-'):
     return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
 
 def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
+    """Carga la lista de residentes desde el archivo subido o desde la sesión"""
     if uploaded_file is not None:
-        return pd.read_csv(uploaded_file)
+        try:
+            # Read the file
+            df = pd.read_csv(uploaded_file)
+            # Update session state
+            st.session_state.residentes_df = df
+            st.session_state.residentes_filename = uploaded_file.name
+            return df
+        except Exception as e:
+            st.error(f"Error al cargar el archivo de residentes: {str(e)}")
+            return pd.DataFrame()
+    
+    # Return from session state if available
+    if not st.session_state.residentes_df.empty:
+        return st.session_state.residentes_df
+    
     return pd.DataFrame()
+
+def obtener_nombre_archivo_residentes() -> str:
+    """Obtiene el nombre del archivo de residentes guardado"""
+    return st.session_state.get('residentes_filename', "No se ha cargado ningún archivo")
 
 def procesar_archivo_asistencia(uploaded_file) -> List[str]:
     """Process an uploaded attendance file and return list of participants."""
@@ -150,6 +175,15 @@ fecha_fin_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
 # File uploaders
 st.sidebar.header("📤 Cargar Archivos")
 
+# Show current resident file info if exists
+current_resident_file = obtener_nombre_archivo_residentes()
+if current_resident_file != "No se ha cargado ningún archivo":
+    st.sidebar.success(f"✅ Archivo cargado: {current_resident_file}")
+    if st.sidebar.button("🗑️ Limpiar archivo de residentes"):
+        st.session_state.residentes_df = pd.DataFrame()
+        st.session_state.residentes_filename = None
+        st.rerun()
+
 # Upload resident list
 uploaded_residentes = st.sidebar.file_uploader(
     "📝 Lista de residentes (CSV)",
@@ -165,12 +199,16 @@ uploaded_files = st.sidebar.file_uploader(
     help="Sube los archivos de asistencia exportados de Zoom"
 )
 
-if not uploaded_residentes:
+# Load resident data
+residentes = cargar_lista_residentes(uploaded_residentes)
+
+# Show warning if no resident data is available
+if residentes.empty:
     st.warning("Por favor, sube el archivo con la lista de residentes")
     st.stop()
 
-# Load resident data
-residentes = cargar_lista_residentes(uploaded_residentes)
+# Store in session for faster access
+st.session_state.residentes_df = residentes
 
 # Get attendance for the selected date range
 asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin, uploaded_files)
