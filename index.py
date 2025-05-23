@@ -319,9 +319,21 @@ for i, fecha in enumerate(pd.date_range(fecha_inicio, fecha_fin)):
         total_manana = 0
         total_tarde = 0
     
+    # Map day names to Spanish
+    dias_semana = {
+        'Monday': 'Lunes',
+        'Tuesday': 'Martes',
+        'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves',
+        'Friday': 'Viernes',
+        'Saturday': 'Sábado',
+        'Sunday': 'Domingo'
+    }
+    
     # Add to attendance data
+    dia_nombre = dias_semana[fecha.strftime('%A')]
     attendance_data.append({
-        'Día': fecha.strftime('%A'),  # Get day name (e.g., 'Monday', 'Tuesday', etc.)
+        'Día': dia_nombre,
         'Fecha': fecha_str,
         'Mañana': total_manana,
         'Tarde': total_tarde
