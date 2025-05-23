@@ -175,9 +175,18 @@ if 'residentes_uploaded' not in st.session_state:
     st.session_state.residentes_uploaded = False
 if 'asistencia_uploaded' not in st.session_state:
     st.session_state.asistencia_uploaded = False
+if 'residentes_file' not in st.session_state:
+    st.session_state.residentes_file = None
+if 'asistencia_files' not in st.session_state:
+    st.session_state.asistencia_files = []
+
+# Check if both files are uploaded
+files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
+st.session_state.files_uploaded = files_uploaded
+
 
 # Collapsible file upload section
-with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get('files_uploaded', False)):
+with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("files_uploaded", False)):
     # Upload resident list
     uploaded_residentes = st.file_uploader(
         "📝 Lista de residentes (CSV)",
@@ -198,13 +207,17 @@ with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get('file
     # Update session state when files are uploaded
     if uploaded_residentes is not None:
         st.session_state.residentes_uploaded = True
+        st.session_state.residentes_file = uploaded_residentes
     else:
         st.session_state.residentes_uploaded = False
+        st.session_state.residentes_file = None
 
     if uploaded_files and len(uploaded_files) > 0:
         st.session_state.asistencia_uploaded = True
+        st.session_state.asistencia_files = uploaded_files
     else:
         st.session_state.asistencia_uploaded = False
+        st.session_state.asistencia_files = []
 
     # Show current resident file info
     current_resident_file = obtener_nombre_archivo_residentes()
@@ -216,12 +229,14 @@ with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get('file
             st.session_state.residentes_uploaded = False
             st.rerun()
 
-# Check if both files are uploaded
-files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
-st.session_state.files_uploaded = files_uploaded
+# Update overall flag
+st.session_state.files_uploaded = (
+    st.session_state.residentes_uploaded and st.session_state.asistencia_uploaded
+)
+    
 
 # Show warning if files are missing
-if not files_uploaded:
+if not st.session_state.files_uploaded:
     st.warning("Por favor, sube ambos archivos para habilitar la aplicación")
     st.stop()
 
@@ -234,7 +249,7 @@ col1, col2 = st.columns(2)
 with col1:
     fecha_inicio = st.date_input(
         "Fecha de inicio",
-        disabled=not files_uploaded,
+        disabled=not st.session_state.files_uploaded,
         help="Selecciona la fecha de inicio del rango"
     )
 
@@ -243,7 +258,7 @@ with col2:
     if st.session_state.rango_fechas:
         fecha_fin = st.date_input(
             "Fecha de fin",
-            disabled=not files_uploaded,
+            disabled=not st.session_state.files_uploaded,
             help="Selecciona la fecha de fin del rango"
         )
     else:
@@ -253,7 +268,7 @@ with col2:
 st.checkbox(
     "Rango de fechas",
     key='rango_fechas',
-    disabled=not files_uploaded,
+    disabled=not st.session_state.files_uploaded,
     help="Marcar para seleccionar un rango de fechas, desmarcar para una sola fecha"
 )
 
@@ -261,7 +276,7 @@ st.checkbox(
 skip_weekends = st.checkbox(
     "Omitir fines de semana", 
     value=True,
-    disabled=not files_uploaded,
+    disabled=not st.session_state.files_uploaded,
     help="Si está marcado, no se incluirán sábados ni domingos",
     key="skip_weekends"
 )
@@ -314,6 +329,7 @@ attendance_df = pd.DataFrame(attendance_data)
 # Display the attendance table
 st.subheader("📊 Reporte diario de asistencia")
 
+# Show total attendance metrics only if it not a range of dates
 if fecha_inicio == fecha_fin:
     # Add a metric for total attendance only for single dates
     with st.container():
@@ -354,9 +370,10 @@ else:
 
 editor_df = pd.DataFrame(editor_data)
 
-# Display the editor
-with st.container():
-    st.subheader(f"✏️ Asistencia para {fecha_actual_slash}")
+# Display the editor if it is not a range of dates
+if fecha_inicio == fecha_fin:
+    with st.container():
+        st.subheader(f"✏️ Asistencia para {fecha_actual_slash}")
     
     # Only show editor if we have data
     if not editor_df.empty:
