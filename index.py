@@ -168,7 +168,7 @@ def initialize_attendance_for_date(fecha, residentes_df, uploaded_files=None):
     return attendance_key
 
 # --- UI ---
-st.title("📋 Seguimiento de Asistencia - Curso de CBA")
+st.title("📋 Seguimiento de Asistencia")
 
 # Initialize only if not exists
 if 'rango_fechas' not in st.session_state:
