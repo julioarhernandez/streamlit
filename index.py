@@ -170,6 +170,61 @@ def initialize_attendance_for_date(fecha, residentes_df, uploaded_files=None):
 # --- UI ---
 st.title("📋 Seguimiento de Asistencia")
 
+# Initialize session state for file uploads
+if 'residentes_uploaded' not in st.session_state:
+    st.session_state.residentes_uploaded = False
+if 'asistencia_uploaded' not in st.session_state:
+    st.session_state.asistencia_uploaded = False
+
+# Collapsible file upload section
+with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get('files_uploaded', False)):
+    # Upload resident list
+    uploaded_residentes = st.file_uploader(
+        "📝 Lista de residentes (CSV)",
+        type=["csv"],
+        help="Sube el archivo CSV con la lista de residentes",
+        key="residentes_uploader"
+    )
+
+    # Upload attendance files
+    uploaded_files = st.file_uploader(
+        "📊 Archivos de asistencia",
+        type=["csv"],
+        accept_multiple_files=True,
+        help="Sube los archivos de asistencia exportados de Zoom",
+        key="asistencia_uploader"
+    )
+
+    # Update session state when files are uploaded
+    if uploaded_residentes is not None:
+        st.session_state.residentes_uploaded = True
+    else:
+        st.session_state.residentes_uploaded = False
+
+    if uploaded_files and len(uploaded_files) > 0:
+        st.session_state.asistencia_uploaded = True
+    else:
+        st.session_state.asistencia_uploaded = False
+
+    # Show current resident file info
+    current_resident_file = obtener_nombre_archivo_residentes()
+    if current_resident_file != "No se ha cargado ningún archivo":
+        st.success(f"✅ Archivo cargado: {current_resident_file}")
+        if st.button("🗑️ Limpiar archivo de residentes"):
+            st.session_state.residentes_df = pd.DataFrame()
+            st.session_state.residentes_filename = None
+            st.session_state.residentes_uploaded = False
+            st.rerun()
+
+# Check if both files are uploaded
+files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
+st.session_state.files_uploaded = files_uploaded
+
+# Show warning if files are missing
+if not files_uploaded:
+    st.warning("Por favor, sube ambos archivos para habilitar la aplicación")
+    st.stop()
+
 # Initialize only if not exists
 if 'rango_fechas' not in st.session_state:
     st.session_state.rango_fechas = True
@@ -177,20 +232,28 @@ if 'rango_fechas' not in st.session_state:
 # Get date range input
 col1, col2 = st.columns(2)
 with col1:
-    fecha_inicio = st.date_input("Fecha de inicio")
+    fecha_inicio = st.date_input(
+        "Fecha de inicio",
+        disabled=not files_uploaded,
+        help="Selecciona la fecha de inicio del rango"
+    )
 
 # Only show end date if range is enabled
-if st.session_state.rango_fechas:
-    with col2:
-        fecha_fin = st.date_input("Fecha de fin")
-else:
-    fecha_fin = fecha_inicio  # Use start date as end date
+with col2:
+    if st.session_state.rango_fechas:
+        fecha_fin = st.date_input(
+            "Fecha de fin",
+            disabled=not files_uploaded,
+            help="Selecciona la fecha de fin del rango"
+        )
+    else:
+        fecha_fin = fecha_inicio  # Use start date as end date
 
-# Date range checkbox - use session state key directly
+# Date range checkbox
 st.checkbox(
     "Rango de fechas",
-    value=st.session_state.rango_fechas,
-    key='rango_fechas',  # This directly updates st.session_state.rango_fechas
+    key='rango_fechas',
+    disabled=not files_uploaded,
     help="Marcar para seleccionar un rango de fechas, desmarcar para una sola fecha"
 )
 
@@ -198,35 +261,9 @@ st.checkbox(
 skip_weekends = st.checkbox(
     "Omitir fines de semana", 
     value=True,
+    disabled=not files_uploaded,
     help="Si está marcado, no se incluirán sábados ni domingos",
     key="skip_weekends"
-)
-
-# File uploaders
-st.sidebar.header("📤 Cargar Archivos")
-
-# Show current resident file info if exists
-current_resident_file = obtener_nombre_archivo_residentes()
-if current_resident_file != "No se ha cargado ningún archivo":
-    st.sidebar.success(f"✅ Archivo cargado: {current_resident_file}")
-    if st.sidebar.button("🗑️ Limpiar archivo de residentes"):
-        st.session_state.residentes_df = pd.DataFrame()
-        st.session_state.residentes_filename = None
-        st.rerun()
-
-# Upload resident list
-uploaded_residentes = st.sidebar.file_uploader(
-    "📝 Lista de residentes (CSV)",
-    type=["csv"],
-    help="Sube el archivo CSV con la lista de residentes"
-)
-
-# Upload attendance files
-uploaded_files = st.sidebar.file_uploader(
-    "📊 Archivos de asistencia",
-    type=["csv"],
-    accept_multiple_files=True,
-    help="Sube los archivos de asistencia exportados de Zoom"
 )
 
 # Load resident data
