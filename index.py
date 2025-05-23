@@ -349,12 +349,16 @@ if st.session_state.logged_in:
     # Create a DataFrame to store daily attendance
     attendance_data = []
 
-    # Get attendance for each date in the range
-    for i, fecha in enumerate(pd.date_range(fecha_inicio, fecha_fin)):
-        # Skip weekends if the checkbox is checked
-        if st.session_state.skip_weekends and fecha.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-            continue
-            
+    # Generate the actual date range that will be displayed (respecting weekend filtering)
+    date_range = []
+    current_date = fecha_inicio
+    while current_date <= fecha_fin:
+        if not (st.session_state.skip_weekends and current_date.weekday() >= 5):
+            date_range.append(current_date)
+        current_date += timedelta(days=1)
+
+    # Process each date in the filtered range
+    for i, fecha in enumerate(date_range):
         fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
         
         # Get attendance from the pre-calculated data
@@ -386,24 +390,31 @@ if st.session_state.logged_in:
             'Tarde': total_tarde
         })
 
-    # Create a DataFrame for the attendance table
+    # Create a DataFrame for the attendance table with all required columns
     attendance_df = pd.DataFrame(attendance_data)
-
+    
+    # Ensure all required columns exist with default values if missing
+    required_columns = ['Día', 'Fecha', 'Mañana', 'Tarde']
+    for col in required_columns:
+        if col not in attendance_df.columns:
+            attendance_df[col] = 0  # Default value for numeric columns
+    
     st.header("3. Reportes")
-
 
     # Display the attendance table
     st.subheader("📊 Reporte diario de asistencia")
-
-    # Show total attendance metrics only if it not a range of dates
-    if fecha_inicio == fecha_fin:
-        # Add a metric for total attendance only for single dates
+    
+    # Show total attendance metrics only if it's not a range of dates
+    if fecha_inicio == fecha_fin and not attendance_df.empty:
+        # Add metrics for total attendance (only for single dates)
         with st.container():
             col1, col2, _ = st.columns([2, 2, 6])
             with col1:
-                st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
+                morning_total = attendance_df['Mañana'].sum() if 'Mañana' in attendance_df else 0
+                st.metric("Total Mañana", f"{morning_total}")
             with col2:
-                st.metric("Total Tarde", f"{attendance_df['Tarde'].sum()}")
+                afternoon_total = attendance_df['Tarde'].sum() if 'Tarde' in attendance_df else 0
+                st.metric("Total Tarde", f"{afternoon_total}")
 
     # Display the attendance table without index
     st.dataframe(attendance_df, hide_index=True)
