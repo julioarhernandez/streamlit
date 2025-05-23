@@ -153,12 +153,20 @@ st.title("📋 Seguimiento de Asistencia - Curso de CBA")
 if 'manual_attendance' not in st.session_state:
     st.session_state.manual_attendance = {}
 
+# Date range toggle
+rango_fechas = st.checkbox("Rango de fechas", value=True)
+
 # Get date range input
 col1, col2 = st.columns(2)
 with col1:
     fecha_inicio = st.date_input("Fecha de inicio")
-with col2:
-    fecha_fin = st.date_input("Fecha de fin")
+
+# Only show end date if range is enabled
+if rango_fechas:
+    with col2:
+        fecha_fin = st.date_input("Fecha de fin")
+else:
+    fecha_fin = fecha_inicio  # Use start date as end date
 
 # Checkbox for weekend filtering
 skip_weekends = st.checkbox(
