@@ -19,23 +19,39 @@ firebaseConfig = {
 firebase = pyrebase.initialize_app(firebaseConfig)
 auth = firebase.auth()
 
-st.title("Login")
+# Initialize session state for login
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.email = None
 
-email = st.text_input("Email")
-password = st.text_input("Password", type="password")
+# Sidebar for logged in users
+if st.session_state.logged_in:
+    with st.sidebar:
+        st.title(f"Welcome, {st.session_state.email}")
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.session_state.email = None
+            st.rerun()
 
-if st.button("Login"):
-    try:
-        user = auth.sign_in_with_email_and_password(email, password)
-        st.session_state.logged_in = True
-        st.session_state.email = email
-        st.success("Logged in successfully!")
-    except Exception as e:
-        error_str = str(e)
-        if "INVALID_EMAIL" in error_str or "INVALID_PASSWORD" in error_str or "INVALID_LOGIN_CREDENTIALS" in error_str:
-            st.error("Invalid email or password. Please try again.")
-        else:
-            st.error(f"Error: {e}")
+# Login form (only show if not logged in)
+if not st.session_state.logged_in:
+    st.title("Login")
+    
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            st.session_state.logged_in = True
+            st.session_state.email = email
+            st.rerun()  # Rerun to update the UI
+        except Exception as e:
+            error_str = str(e)
+            if "INVALID_EMAIL" in error_str or "INVALID_PASSWORD" in error_str or "INVALID_LOGIN_CREDENTIALS" in error_str:
+                st.error("Invalid email or password. Please try again.")
+            else:
+                st.error(f"Error: {e}")
 
 # Initialize session state for resident data
 if 'residentes_df' not in st.session_state:
