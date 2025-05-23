@@ -19,23 +19,23 @@ firebaseConfig = {
 firebase = pyrebase.initialize_app(firebaseConfig)
 auth = firebase.auth()
 
-st.title("Firebase Email/Password Auth")
+st.title("Login")
 
-st.subheader("Login to Your Account")
 email = st.text_input("Email")
 password = st.text_input("Password", type="password")
-st.button("Login")
-try:
-    user = auth.sign_in_with_email_and_password(email, password)
-    st.success("Logged in successfully!")
-except Exception as e:
-    error_str = str(e)
-    if "INVALID_EMAIL" in error_str:
-        st.error("The email address is invalid or not registered.")
-    elif "INVALID_PASSWORD" in error_str:
-        st.error("The password is incorrect.")
-    else:
-        st.error(f"Error: {e}")
+
+if st.button("Login"):
+    try:
+        user = auth.sign_in_with_email_and_password(email, password)
+        st.session_state.logged_in = True
+        st.session_state.email = email
+        st.success("Logged in successfully!")
+    except Exception as e:
+        error_str = str(e)
+        if "INVALID_EMAIL" in error_str or "INVALID_PASSWORD" in error_str or "INVALID_LOGIN_CREDENTIALS" in error_str:
+            st.error("Invalid email or password. Please try again.")
+        else:
+            st.error(f"Error: {e}")
 
 # Initialize session state for resident data
 if 'residentes_df' not in st.session_state:
