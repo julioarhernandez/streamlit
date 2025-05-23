@@ -3,6 +3,39 @@ import pandas as pd
 from datetime import timedelta
 import io
 from typing import List
+import pyrebase
+
+firebaseConfig = {
+    "apiKey": "AIzaSyCjB9UI5Soj6dHlbzCnrbBuzIfeWKEPMvw",
+    "databaseURL": "https://attendance-bfa78-default-rtdb.firebaseio.com",
+    "authDomain": "attendance-bfa78.firebaseapp.com",
+    "projectId": "attendance-bfa78",
+    "storageBucket": "attendance-bfa78.firebasestorage.app",
+    "messagingSenderId": "13347487257",
+    "appId": "1:13347487257:web:eadf04fb63d40086d4f488",
+    "measurementId": "G-K8KWGGWRX4"
+}
+
+firebase = pyrebase.initialize_app(firebaseConfig)
+auth = firebase.auth()
+
+st.title("Firebase Email/Password Auth")
+
+st.subheader("Login to Your Account")
+email = st.text_input("Email")
+password = st.text_input("Password", type="password")
+st.button("Login")
+try:
+    user = auth.sign_in_with_email_and_password(email, password)
+    st.success("Logged in successfully!")
+except Exception as e:
+    error_str = str(e)
+    if "INVALID_EMAIL" in error_str:
+        st.error("The email address is invalid or not registered.")
+    elif "INVALID_PASSWORD" in error_str:
+        st.error("The password is incorrect.")
+    else:
+        st.error(f"Error: {e}")
 
 # Initialize session state for resident data
 if 'residentes_df' not in st.session_state:
