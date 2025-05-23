@@ -1,14 +1,8 @@
 import streamlit as st
 import pandas as pd
-import os
-import glob
-from datetime import datetime, timedelta
+from datetime import timedelta
 import io
-from copy import deepcopy
-from typing import List, Tuple, Optional, Dict, Any, Union
-import tempfile
-import uuid
-import json
+from typing import List
 
 # Initialize session state for resident data
 if 'residentes_df' not in st.session_state:
