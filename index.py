@@ -189,9 +189,9 @@ st.session_state.files_uploaded = files_uploaded
 with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("files_uploaded", False)):
     # Upload resident list
     uploaded_residentes = st.file_uploader(
-        "📝 Lista de residentes (CSV)",
+        "📝 Lista de Estudiantes (CSV)",
         type=["csv"],
-        help="Sube el archivo CSV con la lista de residentes",
+        help="Sube el archivo CSV con la lista de Estudiantes",
         key="residentes_uploader"
     )
 
@@ -223,7 +223,7 @@ with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("file
     current_resident_file = obtener_nombre_archivo_residentes()
     if current_resident_file != "No se ha cargado ningún archivo":
         st.success(f"✅ Archivo cargado: {current_resident_file}")
-        if st.button("🗑️ Limpiar archivo de residentes"):
+        if st.button("🗑️ Limpiar archivo de Estudiantes"):
             st.session_state.residentes_df = pd.DataFrame()
             st.session_state.residentes_filename = None
             st.session_state.residentes_uploaded = False
@@ -290,7 +290,7 @@ residentes = cargar_lista_residentes(uploaded_residentes)
 
 # Show warning if no resident data is available
 if residentes.empty:
-    st.warning("Por favor, sube el archivo con la lista de residentes")
+    st.warning("Por favor, sube el archivo con la lista de Estudiantes")
     st.stop()
 
 # Store in session for faster access
@@ -423,7 +423,7 @@ if fecha_inicio == fecha_fin:
                     'tarde': bool(row['tarde'])
                 }
     else:
-        st.warning("No hay datos de estudiantes para mostrar. Verifica que el archivo de residentes esté cargado correctamente.")
+        st.warning("No hay datos de estudiantes para mostrar. Verifica que el archivo de Estudiantes esté cargado correctamente.")
 
 # Calculate who attended during the entire range (including manual edits)
 asistencia_total = set()
