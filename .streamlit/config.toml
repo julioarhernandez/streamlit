@@ -1,0 +1,8 @@
+[theme]
+base = "light"
+primaryColor = "#FFA500"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#000000"
+font = "sans serif"
+borderRadius = 0.5  # Accepts a float between 0 (square) and 1 (fully rounded)

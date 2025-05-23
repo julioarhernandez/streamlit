@@ -184,6 +184,7 @@ if 'asistencia_files' not in st.session_state:
 files_uploaded = st.session_state.get('residentes_uploaded', False) and st.session_state.get('asistencia_uploaded', False)
 st.session_state.files_uploaded = files_uploaded
 
+st.header("1. Cargar Archivos")
 
 # Collapsible file upload section
 with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("files_uploaded", False)):
@@ -243,6 +244,8 @@ if not st.session_state.files_uploaded:
 # Initialize only if not exists
 if 'rango_fechas' not in st.session_state:
     st.session_state.rango_fechas = True
+
+st.header("2. Seleccionar Rango de Fechas")
 
 # Get date range input
 col1, col2 = st.columns(2)
@@ -341,6 +344,9 @@ for i, fecha in enumerate(pd.date_range(fecha_inicio, fecha_fin)):
 
 # Create a DataFrame for the attendance table
 attendance_df = pd.DataFrame(attendance_data)
+
+st.header("3. Reportes")
+
 
 # Display the attendance table
 st.subheader("📊 Reporte diario de asistencia")
