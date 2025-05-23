@@ -12,6 +12,8 @@ import json
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
+import json
+from firebase_config import save_user_session, get_user_sessions
 
 # Load credentials from YAML file
 with open('credentials.yaml', 'r') as f:
@@ -200,8 +202,32 @@ try:
         st.error('Usuario/contraseña incorrectos')
         st.stop()
     
-    # If we get here, the user is authenticated
+        # If we get here, the user is authenticated
+    username = st.session_state['username']
     st.sidebar.title(f"Bienvenido, {st.session_state['name']}")
+    
+    # Save session data to Firebase
+    session_data = {
+        'login_time': datetime.now().isoformat(),
+        'user_agent': st.query_params.get('user_agent', [''])[0],
+        'session_id': str(uuid.uuid4())
+    }
+    
+    if save_user_session(username, session_data):
+        st.sidebar.success("Sesión guardada en la nube")
+    else:
+        st.sidebar.warning("No se pudo guardar la sesión en la nube")
+    
+    # Add a button to view session history
+    if st.sidebar.button("Ver historial de sesiones"):
+        sessions = get_user_sessions(username)
+        if sessions:
+            st.sidebar.subheader("Tus sesiones anteriores:")
+            for i, session in enumerate(sessions, 1):
+                st.sidebar.write(f"Sesión {i}: {session.get('login_time')}")
+        else:
+            st.sidebar.info("No hay sesiones anteriores registradas")
+    
     authenticator.logout('Cerrar sesión', 'sidebar', key='unique_logout')
     
 except Exception as e:
