@@ -5,9 +5,9 @@ import glob
 from datetime import datetime, timedelta
 import io
 from copy import deepcopy
-
-CARPETA_ONEDRIVE = r"C:\Users\JulioRodriguez\OneDrive - InterAmerican Technical Institute\Attendance"
-ARCHIVO_RESIDENTES = "residentes.csv"
+from typing import List, Tuple, Optional, Dict, Any
+import tempfile
+import uuid
 
 def format_date(fecha, separator='-'):
     """
@@ -24,94 +24,101 @@ def format_date(fecha, separator='-'):
         raise ValueError("Separator must be either '-' or '/'")
     return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
 
-def cargar_lista_residentes():
-    path_residentes = os.path.join(CARPETA_ONEDRIVE, ARCHIVO_RESIDENTES)
-    return pd.read_csv(path_residentes)
+def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
+    if uploaded_file is not None:
+        return pd.read_csv(uploaded_file)
+    return pd.DataFrame()
 
-def buscar_archivos_asistencia(fecha_str, tipo="Tarde"):
-    # Construct pattern that matches any prefix followed by the consistent parts
-    patron = f"*{tipo} - Attendance report {fecha_str}.csv"
-    ruta = os.path.join(CARPETA_ONEDRIVE, patron)
-    archivos = glob.glob(ruta)
-    
-    # Add debug logging
-    # st.write(f"Searching for pattern: {patron}")
-    # st.write(f"Found files: {archivos}")
-    
-    return archivos
-
-def extraer_participantes(archivo):
+def procesar_archivo_asistencia(uploaded_file) -> List[str]:
+    """Process an uploaded attendance file and return list of participants."""
     try:
-        # Read the file line by line to handle TSV format
-        with open(archivo, 'r', encoding='utf-16') as f:
-            lines = f.readlines()
+        # Read the file content as string
+        content = uploaded_file.getvalue().decode('utf-16')
+        lines = content.split('\n')
         
-        # Find the start of the participants section
-        start_idx = next(i for i, line in enumerate(lines)
-                         if line.strip().startswith("Name\tFirst Join"))
+        # Find the start and end of the participants section
+        start_idx = next((i for i, line in enumerate(lines) 
+                         if line.strip().startswith("Name\tFirst Join")), None)
         
-        # Find the end of the participants section (line with "3. In-Meeting Activities")
-        end_idx = next(i for i, line in enumerate(lines[start_idx:], start_idx)
-                      if "3. In-Meeting Activities" in line.strip())
+        if start_idx is None:
+            st.warning("Formato de archivo no reconocido. No se encontró el encabezado de participantes.")
+            return []
+            
+        end_idx = next((i for i, line in enumerate(lines[start_idx:], start_idx)
+                      if "3. In-Meeting Activities" in line.strip()), len(lines))
         
-        # Get the participants section (including the header line)
-        data_lines = lines[start_idx:end_idx]  # Get all lines from start to end_idx (exclusive)
+        # Get the participants section
+        data_lines = lines[start_idx:end_idx]
         
         # Create DataFrame from the specific lines
-        df = pd.read_csv(io.StringIO("".join(data_lines)), sep="\t")
-        
-        # Debug logging
-        # st.write(f"\nReading file: {archivo}")
-        # st.write(f"Raw data: {df}")
+        df = pd.read_csv(io.StringIO("\n".join(data_lines)), sep="\t")
         
         # Filter out organizers and get unique names
         df_filtered = df[df['Role'] != 'Organizer']
-        participantes = df_filtered["Name"].dropna().unique()
-        # st.write(f"Filtered participants: {participantes}")
+        participantes = df_filtered["Name"].dropna().unique().tolist()
         
         return participantes
     except Exception as e:
-        st.warning(f"No se pudo leer: {archivo}\nError: {e}")
+        st.error(f"Error al procesar el archivo: {str(e)}")
         return []
 
-def asistencia_dia(fecha):
-    # If fecha is already a string, use it directly
-    if isinstance(fecha, str):
-        fecha_str = fecha
-    else:
-        # Format date as M-DD-YY
-        fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}" 
+# This function is replaced by procesar_archivo_asistencia
+
+def asistencia_dia(fecha, uploaded_files=None):
+    """Process attendance for a specific date using uploaded files.
     
-    # First check for Mañana files
-    archivos_manana = buscar_archivos_asistencia(fecha_str, "Mañana")
+    Args:
+        fecha: Date as datetime or string
+        uploaded_files: List of uploaded files
+        
+    Returns:
+        Tuple of (nombres_manana, nombres_tarde) - lists of names
+    """
     nombres_manana = set()
-    if archivos_manana:
-        nombres_manana = set(extraer_participantes(archivos_manana[0]))
-    
-    # Then check for Tarde files
-    archivos_tarde = buscar_archivos_asistencia(fecha_str, "Tarde")
     nombres_tarde = set()
-    if archivos_tarde:
-        nombres_tarde = set(extraer_participantes(archivos_tarde[0]))
     
-    # Convert sets to lists for consistent ordering
+    if uploaded_files:
+        # Convert date to multiple possible string formats for matching
+        if not isinstance(fecha, str):
+            # Try multiple date formats that might be in filenames
+            date_formats = [
+                f"{fecha.month}-{fecha.day}-{fecha.year % 100}",  # M-D-YY
+                f"{fecha.month:02d}-{fecha.day:02d}-{fecha.year % 100:02d}",  # MM-DD-YY
+                f"{fecha.month}/{fecha.day}/{fecha.year % 100}",  # M/D/YY
+                f"{fecha.month:02d}/{fecha.day:02d}/{fecha.year % 100:02d}",  # MM/DD/YY
+                f"{fecha.year}-{fecha.month:02d}-{fecha.day:02d}"  # YYYY-MM-DD
+            ]
+        else:
+            date_formats = [fecha]
+        
+        for file in uploaded_files:
+            file_name = file.name
+            
+            # Check if this file is for any of the date formats and session
+            for date_fmt in date_formats:
+                if str(date_fmt) in file_name:
+                    try:
+                        if "mañana" in file_name.lower():
+                            nombres_manana.update(procesar_archivo_asistencia(file))
+                        elif "tarde" in file_name.lower():
+                            nombres_tarde.update(procesar_archivo_asistencia(file))
+                        break  # Found a matching date format, no need to check others
+                    except Exception as e:
+                        st.warning(f"Error procesando archivo {file_name}: {str(e)}")
+                        break
+    
     return list(nombres_manana), list(nombres_tarde)
 
-def asistencia_semana(desde, hasta, skip_weekends=True):
+def asistencia_semana(desde, hasta, uploaded_files=None, skip_weekends=True):
     dias = pd.date_range(desde, hasta)
     if skip_weekends:
         dias = [d for d in dias if d.weekday() < 5]  # Only keep weekdays (0-4 = Monday-Friday)
+    
     asistencias = []
     for dia in dias:
-        # Format date as M-DD-YY (single digit month)
-        fecha_str = f"{dia.month}-{dia.day}-{dia.year % 100}"
-        # st.write(f"Processing date: {fecha_str}")
-        
-        # Get attendance for this date
-        asistencia_manana, asistencia_tarde = asistencia_dia(fecha_str)
+        asistencia_manana, asistencia_tarde = asistencia_dia(dia, uploaded_files)
         asistencias.append((asistencia_manana, asistencia_tarde))
-        
-
+    
     return asistencias
 
 # --- UI ---
@@ -140,11 +147,33 @@ skip_weekends = st.checkbox(
 fecha_inicio_str = f"{fecha_inicio.month}-{fecha_inicio.day}-{fecha_inicio.year % 100}"
 fecha_fin_str = f"{fecha_fin.month}-{fecha_fin.day}-{fecha_fin.year % 100}"
 
-# Get base attendance data
-residentes = cargar_lista_residentes()
+# File uploaders
+st.sidebar.header("📤 Cargar Archivos")
+
+# Upload resident list
+uploaded_residentes = st.sidebar.file_uploader(
+    "📝 Lista de residentes (CSV)",
+    type=["csv"],
+    help="Sube el archivo CSV con la lista de residentes"
+)
+
+# Upload attendance files
+uploaded_files = st.sidebar.file_uploader(
+    "📊 Archivos de asistencia",
+    type=["csv"],
+    accept_multiple_files=True,
+    help="Sube los archivos de asistencia exportados de Zoom"
+)
+
+if not uploaded_residentes:
+    st.warning("Por favor, sube el archivo con la lista de residentes")
+    st.stop()
+
+# Load resident data
+residentes = cargar_lista_residentes(uploaded_residentes)
 
 # Get attendance for the selected date range
-asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin)
+asistencias_por_dia = asistencia_semana(fecha_inicio, fecha_fin, uploaded_files)
 
 # Create a copy of residentes to modify
 residentes_editados = residentes.copy()
@@ -159,7 +188,8 @@ for fecha in pd.date_range(fecha_inicio, fecha_fin):
         continue
         
     fecha_str = f"{fecha.month}-{fecha.day}-{fecha.year % 100}"
-    asistentes_manana, asistentes_tarde = asistencia_dia(fecha_str)
+    # Use the uploaded files for attendance processing
+    asistentes_manana, asistentes_tarde = asistencia_dia(fecha, uploaded_files)
     
     # Get manual attendance for this date
     if fecha_str not in st.session_state.manual_attendance:
