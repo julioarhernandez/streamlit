@@ -349,7 +349,7 @@ st.subheader("📊 Reporte diario de asistencia")
 if fecha_inicio == fecha_fin:
     # Add a metric for total attendance only for single dates
     with st.container():
-        col1, col2 = st.columns(2)
+        col1, col2, _ = st.columns([2, 2, 6])
         with col1:
             st.metric("Total Mañana", f"{attendance_df['Mañana'].sum()}")
         with col2:
