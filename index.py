@@ -153,8 +153,14 @@ st.title("📋 Seguimiento de Asistencia - Curso de CBA")
 if 'manual_attendance' not in st.session_state:
     st.session_state.manual_attendance = {}
 
-# Date range toggle
-rango_fechas = st.checkbox("Rango de fechas", value=True)
+# Initialize date range toggle in session state
+# Initialize only if not exists
+if 'rango_fechas' not in st.session_state:
+    st.session_state.rango_fechas = True
+
+# Date range toggle with on_change callback
+def toggle_rango_fechas():
+    st.session_state.rango_fechas = not st.session_state.rango_fechas
 
 # Get date range input
 col1, col2 = st.columns(2)
@@ -162,11 +168,19 @@ with col1:
     fecha_inicio = st.date_input("Fecha de inicio")
 
 # Only show end date if range is enabled
-if rango_fechas:
+if st.session_state.rango_fechas:
     with col2:
         fecha_fin = st.date_input("Fecha de fin")
 else:
     fecha_fin = fecha_inicio  # Use start date as end date
+
+# Date range checkbox - use session state key directly
+st.checkbox(
+    "Rango de fechas",
+    value=st.session_state.rango_fechas,
+    key='rango_fechas',  # This directly updates st.session_state.rango_fechas
+    help="Marcar para seleccionar un rango de fechas, desmarcar para una sola fecha"
+)
 
 # Checkbox for weekend filtering
 skip_weekends = st.checkbox(
