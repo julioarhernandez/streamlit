@@ -122,19 +122,19 @@ if 'manual_attendance' not in st.session_state:
     st.session_state.manual_attendance = {}
 
 # Get date range input
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 with col1:
     fecha_inicio = st.date_input("Fecha de inicio")
 with col2:
     fecha_fin = st.date_input("Fecha de fin")
-with col3:
-    # Checkbox for weekend filtering
-    skip_weekends = st.checkbox(
-        "Omitir fines de semana", 
-        value=True,
-        help="Si está marcado, no se incluirán sábados ni domingos",
-        key="skip_weekends"
-    )
+
+# Checkbox for weekend filtering
+skip_weekends = st.checkbox(
+    "Omitir fines de semana", 
+    value=True,
+    help="Si está marcado, no se incluirán sábados ni domingos",
+    key="skip_weekends"
+)
 
 # Format dates as M-DD-YY
 fecha_inicio_str = f"{fecha_inicio.month}-{fecha_inicio.day}-{fecha_inicio.year % 100}"
