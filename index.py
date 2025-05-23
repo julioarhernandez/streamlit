@@ -372,13 +372,13 @@ if attendance_key in st.session_state and st.session_state[attendance_key]:
 
 # Create the final attendance status
 residentes_con_asistencia = residentes.copy()
-residentes_con_asistencia["asistio_semana"] = residentes_con_asistencia["nombre"].isin(asistencia_total)
+residentes_con_asistencia["asistió_semana"] = residentes_con_asistencia["nombre"].isin(asistencia_total)
 
 # Show absent students report
 st.subheader("📉 Estudiantes sin asistencia este rango de fecha")
 
 # Get the list of absent students
-ausentes = residentes_con_asistencia[~residentes_con_asistencia["asistio_semana"]][["nombre"]]
+ausentes = residentes_con_asistencia[~residentes_con_asistencia["asistió_semana"]][["nombre"]]
 
 # Calculate total absent students
 num_ausentes = len(ausentes)
