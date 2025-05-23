@@ -1,5 +1,13 @@
 import streamlit as st
 import pandas as pd
+import sys
+import os
+
+# Print environment information
+# print("Python version:", sys.version, file=sys.stderr)
+# print("Streamlit version:", st.__version__, file=sys.stderr)
+# print("Current working directory:", os.getcwd(), file=sys.stderr)
+# print("Files in directory:", os.listdir('.'), file=sys.stderr)
 import os
 import glob
 from datetime import datetime, timedelta
@@ -13,11 +21,61 @@ import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
 import json
-from firebase_config import save_user_session, get_user_sessions
+from firebase_config import save_user_session, get_user_last_session, save_user_files, get_user_sessions
+
+# print("Starting app...", file=sys.stderr)
 
 # Load credentials from YAML file
-with open('credentials.yaml', 'r') as f:
-    credentials = yaml.load(f, Loader=SafeLoader)
+try:
+    with open('credentials.yaml') as file:
+        credentials = yaml.load(file, Loader=SafeLoader)
+    
+    # Debug credentials structure (without showing sensitive data)
+    print("\nCredentials structure:")
+    if isinstance(credentials, dict):
+        print(f"Top-level keys: {list(credentials.keys())}")
+        if 'credentials' in credentials:
+            print("'credentials' key exists")
+            if 'usernames' in credentials['credentials']:
+                print("'usernames' key exists under 'credentials'")
+                print(f"Number of users: {len(credentials['credentials']['usernames'])}")
+            else:
+                print("WARNING: 'usernames' key missing under 'credentials'")
+        else:
+            print("WARNING: 'credentials' key missing")
+        
+        if 'cookie' in credentials:
+            print("'cookie' key exists with these subkeys:", list(credentials['cookie'].keys()))
+        else:
+            print("WARNING: 'cookie' key missing")
+    else:
+        print(f"WARNING: credentials is not a dictionary, it's {type(credentials)}")
+    
+    # Validate credentials structure
+    if not all(key in credentials for key in ['credentials', 'cookie']):
+        st.error("Formato de credenciales inválido. Asegúrate de que el archivo credentials.yaml tenga la estructura correcta.")
+        st.stop()
+    
+    # Ensure the credentials structure is correct for streamlit-authenticator 0.4.2
+    if 'credentials' in credentials and 'usernames' not in credentials['credentials']:
+        # Create the expected structure
+        credentials = {
+            'credentials': {
+                'usernames': credentials.get('credentials', {})
+            },
+            'cookie': credentials.get('cookie', {
+                'name': 'attendance_cookie',
+                'key': 'attendance_signature_key',
+                'expiry_days': 30
+            })
+        }
+        
+except FileNotFoundError:
+    st.error("Error: No se encontró el archivo de credenciales (credentials.yaml)")
+    st.stop()
+except Exception as e:
+    st.error(f"Error al cargar las credenciales: {str(e)}")
+    st.stop()
 
 def format_date(fecha, separator='-'):
     """
@@ -34,22 +92,65 @@ def format_date(fecha, separator='-'):
         raise ValueError("Separator must be either '-' or '/'")
     return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
 
-def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
+def cargar_lista_residentes(uploaded_file=None):
     """Carga la lista de residentes desde el archivo subido o desde la sesión"""
     if uploaded_file is not None:
         try:
-            # Read the file
-            df = pd.read_csv(uploaded_file)
+            # First, check if the file has content
+            file_content = uploaded_file.getvalue()
+            if len(file_content) == 0:
+                st.error("El archivo está vacío. Por favor, sube un archivo con datos.")
+                return pd.DataFrame()
+            
+            # Reset file pointer to beginning
+            uploaded_file.seek(0)
+            
+            # Try reading as CSV with different encodings
+            encodings_to_try = ['utf-8', 'latin1', 'ISO-8859-1', 'cp1252']
+            df = None
+            
+            for encoding in encodings_to_try:
+                try:
+                    uploaded_file.seek(0)  # Reset file pointer for each attempt
+                    df = pd.read_csv(uploaded_file, encoding=encoding)
+                    break  # If successful, exit the loop
+                except UnicodeDecodeError:
+                    continue  # Try next encoding
+                except pd.errors.EmptyDataError:
+                    st.error("El archivo CSV no contiene columnas o datos. Por favor, verifica el formato.")
+                    return pd.DataFrame()
+                except Exception as e:
+                    # If it's not an encoding issue, break and report the error
+                    st.error(f"Error al leer el archivo CSV: {str(e)}")
+                    return pd.DataFrame()
+            
+            # If all encodings failed
+            if df is None:
+                st.error("No se pudo leer el archivo con ninguna codificación compatible. Por favor, verifica el formato.")
+                return pd.DataFrame()
+            
+            # Validate that the dataframe has data
+            if df.empty:
+                st.error("El archivo no contiene datos. Por favor, sube un archivo con datos.")
+                return pd.DataFrame()
+                
+            # Validate that the dataframe has at least one column
+            if len(df.columns) == 0:
+                st.error("El archivo no contiene columnas. Por favor, verifica el formato.")
+                return pd.DataFrame()
+                
             # Update session state
             st.session_state.residentes_df = df
             st.session_state.residentes_filename = uploaded_file.name
             return df
+            
         except Exception as e:
             st.error(f"Error al cargar el archivo de residentes: {str(e)}")
+            st.error("Asegúrate de que el archivo sea un CSV válido con la codificación correcta.")
             return pd.DataFrame()
     
     # Return from session state if available
-    if not st.session_state.residentes_df.empty:
+    if 'residentes_df' in st.session_state and not st.session_state.residentes_df.empty:
         return st.session_state.residentes_df
     
     return pd.DataFrame()
@@ -171,53 +272,137 @@ def initialize_attendance_for_date(fecha, residentes_df, uploaded_files=None):
     
     return attendance_key
 
+
 # --- Authentication ---
-# Create authenticator object
-try:
-    authenticator = stauth.Authenticate(
-        credentials['credentials'],
-        credentials['cookie']['name'],
-        credentials['cookie']['key'],
-        credentials['cookie']['expiry_days'],
-        auto_hash=credentials.get('auto_hash', True)  # Enable auto-hashing
-    )
-except Exception as e:
-    st.error(f"Error initializing authenticator: {str(e)}")
+
+# Set page config
+st.set_page_config(
+    page_title="Sistema de Asistencia",
+    page_icon="📋",
+    layout="wide"
+)
+
+# Main container
+main_container = st.container()
+with main_container:
+    st.title("Sistema de Asistencia")
+
+# Initialize session state variables for authentication
+if 'authentication_status' not in st.session_state:
+    st.session_state.authentication_status = False
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'name' not in st.session_state:
+    st.session_state.name = None
+if 'user_session_id' not in st.session_state:
+    st.session_state.user_session_id = str(uuid.uuid4())
+
+# Simple login/logout functions
+def login(username, password):
+    """Simple login function that checks credentials"""
+    if (
+        'credentials' in credentials
+        and 'usernames' in credentials['credentials']
+        and username in credentials['credentials']['usernames']
+    ):
+        user_creds = credentials['credentials']['usernames'][username]
+        if password == user_creds.get('password'):
+            return True, user_creds.get('name', username)
+    return False, None
+
+def logout():
+    """Clear session state to log out"""
+    st.session_state.authentication_status = False
+    st.session_state.username = None
+    st.session_state.name = None
+    # Keep other session state values that are not related to authentication
+    if 'residentes_df' in st.session_state:
+        st.session_state.residentes_df = pd.DataFrame()
+    if 'residentes_filename' in st.session_state:
+        st.session_state.residentes_filename = None
+    if 'residentes_uploaded' in st.session_state:
+        st.session_state.residentes_uploaded = False
+    if 'residentes_file' in st.session_state:
+        st.session_state.residentes_file = None
+
+# Display login form if not authenticated
+if not st.session_state.authentication_status:
+    with main_container:
+        st.subheader("Iniciar sesión")
+        
+        # Simple login form
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        login_button = st.button("Iniciar sesión")
+        
+        if login_button and username and password:
+            auth_success, name = login(username, password)
+            if auth_success:
+                st.session_state.authentication_status = True
+                st.session_state.username = username
+                st.session_state.name = name
+                
+                # Save session to Firebase
+                try:
+                    session_data = {
+                        'username': username,
+                        'name': name,
+                        'login_time': datetime.now().isoformat(),
+                        'session_id': st.session_state.user_session_id,
+                        'user_agent': st.query_params.get('user_agent', [''])[0] if hasattr(st, 'query_params') else ''
+                    }
+                    
+                    save_user_session(username, session_data)
+                    st.success(f"Bienvenido, {name}!")
+                    st.rerun()
+                except Exception as e:
+                    st.warning(f"Sesión iniciada, pero no se pudo guardar la información: {str(e)}")
+            else:
+                st.error("Usuario o contraseña incorrectos")
+
+# Show logout button in sidebar if authenticated
+if st.session_state.authentication_status:
+    with st.sidebar:
+        st.success(f'Conectado como: {st.session_state["name"]}')
+        if st.button("Cerrar sesión"):
+            logout()
+            st.rerun()
+# If we get here, authentication is required
+if not st.session_state.authentication_status:
+    st.warning("Por favor inicia sesión para continuar")
     st.stop()
 
-# Render the login widget
-try:
-    authenticator.login(
-        fields={'Form name': 'Iniciar sesión', 'Username': 'Usuario', 'Password': 'Contraseña', 'Login': 'Iniciar sesión'},
-        location='main',
-        key='login_form'
-    )
-    
-    # Check authentication status
-    if st.session_state["authentication_status"] is None:
-        st.warning('Por favor ingresa tu nombre de usuario y contraseña')
-        st.stop()
-    
-    if st.session_state["authentication_status"] is False:
-        st.error('Usuario/contraseña incorrectos')
-        st.stop()
-    
-        # If we get here, the user is authenticated
+
+# After authentication block
+if 'username' in st.session_state and st.session_state['authentication_status']:
     username = st.session_state['username']
-    st.sidebar.title(f"Bienvenido, {st.session_state['name']}")
+    name = st.session_state['name']
     
-    # Save session data to Firebase
     session_data = {
         'login_time': datetime.now().isoformat(),
-        'user_agent': st.query_params.get('user_agent', [''])[0],
+        'user_agent': st.query_params.get('user_agent', [''])[0] if hasattr(st, 'query_params') else '',
         'session_id': str(uuid.uuid4())
     }
     
-    if save_user_session(username, session_data):
-        st.sidebar.success("Sesión guardada en la nube")
-    else:
-        st.sidebar.warning("No se pudo guardar la sesión en la nube")
+    # Check for existing session data
+    last_session = get_user_last_session(username)
     
+    # If we have a previous session with files, load them
+    if last_session:
+        if last_session.get('last_residentes'):
+            residentes_data = last_session['last_residentes']
+            st.session_state.residentes_df = pd.DataFrame(residentes_data.get('content', []))
+            st.session_state.residentes_filename = residentes_data.get('filename', 'residentes.csv')
+            st.session_state.residentes_uploaded = True
+            
+        if last_session.get('last_asistencia'):
+            asistencia_data = last_session['last_asistencia']
+            st.session_state.asistencia_files = asistencia_data.get('content', [])
+            st.session_state.asistencia_uploaded = True
+    
+    # Save the current session
+    save_user_session(username, session_data)
+
     # Add a button to view session history
     if st.sidebar.button("Ver historial de sesiones"):
         sessions = get_user_sessions(username)
@@ -228,10 +413,11 @@ try:
         else:
             st.sidebar.info("No hay sesiones anteriores registradas")
     
-    authenticator.logout('Cerrar sesión', 'sidebar', key='unique_logout')
-    
-except Exception as e:
-    st.error(f"Error en la autenticación: {str(e)}")
+    # Add logout button
+    if 'authenticator' in locals() and authenticator is not None:
+        authenticator.logout('Cerrar sesión', 'sidebar', key='unique_logout')
+else:
+    st.error("Debes iniciar sesión para acceder a esta aplicación.")
     st.stop()
 
 # Initialize session state for resident data
@@ -277,36 +463,115 @@ with st.expander("📤 Cargar Archivos", expanded=not st.session_state.get("file
         key="asistencia_uploader"
     )
 
-    # Update session state when files are uploaded
-    if uploaded_residentes is not None:
-        st.session_state.residentes_uploaded = True
-        st.session_state.residentes_file = uploaded_residentes
+    # Process resident file upload
+    if uploaded_residentes is not None and 'username' in st.session_state:
+        try:
+            # Try to load the file to validate it using our enhanced function
+            df = cargar_lista_residentes(uploaded_residentes)
+            
+            if not df.empty:
+                # Update session state
+                st.session_state.residentes_uploaded = True
+                st.session_state.residentes_file = uploaded_residentes
+                st.session_state.residentes_df = df
+                st.session_state.residentes_filename = uploaded_residentes.name
+                
+                # Show success message
+                st.success(f"✅ Archivo de residentes cargado correctamente: {uploaded_residentes.name}")
+                
+                # Save to Firebase
+                try:
+                    save_user_files(
+                        st.session_state.username,
+                        residentes_data={
+                            'content': df.to_dict('records'),
+                            'filename': uploaded_residentes.name
+                        }
+                    )
+                except Exception as e:
+                    st.warning(f"El archivo se cargó correctamente pero no se pudo guardar en Firebase: {str(e)}")
+            else:
+                st.error("El archivo está vacío o no tiene el formato esperado.")
+        except Exception as e:
+            st.error(f"Error al procesar el archivo de residentes: {str(e)}")
     else:
+        # If no file is uploaded, ensure the session state is properly set
+        if 'residentes_uploaded' not in st.session_state:
+            st.session_state.residentes_uploaded = False
+            st.session_state.residentes_file = None
+
+    # Process attendance files
+    if uploaded_files and len(uploaded_files) > 0 and 'username' in st.session_state:
+        try:
+            asistencia_data = []
+            processed_files = []
+            
+            for file in uploaded_files:
+                try:
+                    # Try to decode with utf-16 first (Zoom's default export format)
+                    try:
+                        content = file.getvalue().decode('utf-16')
+                    except UnicodeDecodeError:
+                        # If that fails, try other encodings
+                        try:
+                            content = file.getvalue().decode('utf-8')
+                        except UnicodeDecodeError:
+                            content = file.getvalue().decode('latin1')
+                    
+                    asistencia_data.append({
+                        'filename': file.name,
+                        'content': content
+                    })
+                    processed_files.append(file.name)
+                except Exception as file_error:
+                    st.error(f"Error al procesar el archivo {file.name}: {str(file_error)}")
+            
+            if processed_files:
+                # Update session state
+                st.session_state.asistencia_files = uploaded_files
+                st.session_state.asistencia_uploaded = True
+                st.write("[DEBUG] asistencia_uploaded set to True")
+                
+                # Show success message
+                st.success(f"✅ Archivos de asistencia cargados correctamente: {', '.join(processed_files)}")
+                
+                # Save to Firebase
+                try:
+                    save_user_files(
+                        st.session_state.username,
+                        asistencia_data=asistencia_data
+                    )
+                except Exception as firebase_error:
+                    st.warning(f"Los archivos se cargaron correctamente pero no se pudieron guardar en Firebase: {str(firebase_error)}")
+        except Exception as e:
+            st.error(f"Error al cargar los archivos de asistencia: {str(e)}")
+    else:
+        # If no files are uploaded, ensure the session state is properly set
+        if 'asistencia_files' not in st.session_state:
+            st.session_state.asistencia_files = []
+
+# Show current resident file info
+if 'residentes_filename' in st.session_state and st.session_state.residentes_filename:
+    st.success(f"✅ Archivo cargado: {st.session_state.residentes_filename}")
+    if st.button("🗑️ Limpiar archivo de Estudiantes"):
+        st.session_state.residentes_df = pd.DataFrame()
+        st.session_state.residentes_filename = None
         st.session_state.residentes_uploaded = False
         st.session_state.residentes_file = None
-
-    if uploaded_files and len(uploaded_files) > 0:
-        st.session_state.asistencia_uploaded = True
-        st.session_state.asistencia_files = uploaded_files
-    else:
-        st.session_state.asistencia_uploaded = False
-        st.session_state.asistencia_files = []
-
-    # Show current resident file info
-    current_resident_file = obtener_nombre_archivo_residentes()
-    if current_resident_file != "No se ha cargado ningún archivo":
-        st.success(f"✅ Archivo cargado: {current_resident_file}")
-        if st.button("🗑️ Limpiar archivo de Estudiantes"):
-            st.session_state.residentes_df = pd.DataFrame()
-            st.session_state.residentes_filename = None
-            st.session_state.residentes_uploaded = False
-            st.rerun()
+        st.rerun()
+else:
+    st.info("ℹ️ No se ha cargado ningún archivo de residentes.")
 
 # Update overall flag
 st.session_state.files_uploaded = (
     st.session_state.residentes_uploaded and st.session_state.asistencia_uploaded
 )
     
+
+# Debug output for troubleshooting file upload logic
+st.write("residentes_uploaded:", st.session_state.get('residentes_uploaded'))
+st.write("asistencia_uploaded:", st.session_state.get('asistencia_uploaded'))
+st.write("files_uploaded:", st.session_state.get('files_uploaded'))
 
 # Show warning if files are missing
 if not st.session_state.files_uploaded:
