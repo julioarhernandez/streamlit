@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 import io
-from typing import List
+from typing import List, Optional, Tuple
 import pyrebase
 
 firebaseConfig = {
@@ -18,6 +18,7 @@ firebaseConfig = {
 
 firebase = pyrebase.initialize_app(firebaseConfig)
 auth = firebase.auth()
+db = firebase.database()  # Initialize Firebase Database
 
 # Initialize session state for login
 if 'logged_in' not in st.session_state:
@@ -73,8 +74,74 @@ def format_date(fecha, separator='-'):
         raise ValueError("Separator must be either '-' or '/'")
     return f"{fecha.month}{separator}{fecha.day}{separator}{fecha.year % 100}"
 
+def save_residentes_to_firestore(user_email: str, residentes_data: pd.DataFrame, filename: str) -> bool:
+    """Save residentes data to Firebase Realtime Database under user's email"""
+    try:
+        # Clean the email to use as a key (replace . with , as Firebase doesn't allow . in keys)
+        user_key = user_email.replace('.', ',')
+        
+        # Convert DataFrame to dictionary for storage
+        residentes_dict = {
+            'filename': filename,
+            'data': residentes_data.to_dict('records'),
+            'last_updated': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Get a reference to the location
+        ref = db.child("users").child(user_key).child("residentes")
+        
+        # Try to save the data
+        ref.set(residentes_dict)
+        
+        # Verify the data was saved
+        saved_data = ref.get().val()
+        if saved_data is None:
+            st.error("❌ Failed to save data: No data was saved")
+            return False
+            
+        st.success("✅ Data saved successfully to Firebase Realtime Database")
+        return True
+    except Exception as e:
+        st.error(f"❌ Error saving to Firebase: {str(e)}")
+        st.error(f"Database URL: {db.database_url}")
+        st.error(f"Trying to save to path: users/{user_key}/residentes")
+        return False
+
+def load_residentes_from_firestore(user_email: str) -> Tuple[pd.DataFrame, Optional[str]]:
+    """Load residentes data from Firebase Realtime Database for the given user"""
+    try:
+        user_key = user_email.replace('.', ',')
+        # Get the reference first
+        ref = db.child("users").child(user_key).child("residentes")
+        residentes_data = ref.get().val()
+        
+        if residentes_data and 'data' in residentes_data:
+            # Convert the stored data back to DataFrame
+            df = pd.DataFrame(residentes_data['data'])
+            return df, residentes_data.get('filename', 'archivo_cargado.csv')
+        return pd.DataFrame(), None
+    except Exception as e:
+        # Don't show error if data doesn't exist (first time user)
+        if "404" not in str(e):
+            st.error(f"Error al cargar de Firestore: {str(e)}")
+        return pd.DataFrame(), None
+
 def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
-    """Carga la lista de residentes desde el archivo subido o desde la sesión"""
+    """Carga la lista de residentes desde el archivo subido o desde Firestore"""
+    # Try to load from session state first
+    if 'residentes_df' in st.session_state and not st.session_state.residentes_df.empty:
+        return st.session_state.residentes_df
+    
+    # Try to load from Firestore if user is logged in
+    if st.session_state.logged_in and 'email' in st.session_state and st.session_state.email:
+        df, filename = load_residentes_from_firestore(st.session_state.email)
+        if not df.empty:
+            st.session_state.residentes_df = df
+            st.session_state.residentes_filename = filename
+            st.session_state.residentes_uploaded = True
+            return df
+    
+    # Load from uploaded file if provided
     if uploaded_file is not None:
         try:
             # Read the file
@@ -82,14 +149,16 @@ def cargar_lista_residentes(uploaded_file=None) -> pd.DataFrame:
             # Update session state
             st.session_state.residentes_df = df
             st.session_state.residentes_filename = uploaded_file.name
+            st.session_state.residentes_uploaded = True
+            
+            # Save to Firestore if user is logged in
+            if st.session_state.logged_in and 'email' in st.session_state and st.session_state.email:
+                save_residentes_to_firestore(st.session_state.email, df, uploaded_file.name)
+                
             return df
         except Exception as e:
             st.error(f"Error al cargar el archivo de residentes: {str(e)}")
             return pd.DataFrame()
-    
-    # Return from session state if available
-    if not st.session_state.residentes_df.empty:
-        return st.session_state.residentes_df
     
     return pd.DataFrame()
 
@@ -339,7 +408,12 @@ if st.session_state.logged_in:
     if residentes.empty:
         st.warning("Por favor, sube el archivo con la lista de Estudiantes")
         st.stop()
-
+    
+    # If we have a new upload, save it to Firestore
+    if uploaded_residentes is not None and st.session_state.logged_in and 'email' in st.session_state:
+        if save_residentes_to_firestore(st.session_state.email, residentes, uploaded_residentes.name):
+            st.success("✅ Datos de estudiantes guardados en tu cuenta")
+    
     # Store in session for faster access
     st.session_state.residentes_df = residentes
 
