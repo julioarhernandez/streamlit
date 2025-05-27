@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from config import setup_page, db
+from utils import load_students
 
 # Setup page
 setup_page("Attendance Management")
@@ -39,54 +40,69 @@ selected_date = st.date_input("Select Date", today)
 students_df, _ = load_students()
 
 if students_df is not None and not students_df.empty:
-    # Create attendance form
-    attendance_data = load_attendance(selected_date)
+    # Normalize column names (convert to lowercase)
+    students_df.columns = students_df.columns.str.lower()
     
-    # Initialize attendance data if not exists
-    for _, student in students_df.iterrows():
-        student_id = str(student['ID'])
-        if student_id not in attendance_data:
-            attendance_data[student_id] = {
-                'name': f"{student['Nombre']} {student['Apellido']}",
-                'status': 'present',
-                'notes': ''
-            }
+    # Check for required columns
+    required_columns = {'id', 'nombre', 'apellido'}
+    missing_columns = required_columns - set(students_df.columns)
     
-    # Display attendance form
-    st.subheader(f"Attendance for {selected_date.strftime('%B %d, %Y')}")
-    
-    # Create a form for attendance
-    with st.form("attendance_form"):
-        cols = st.columns([3, 2, 4])
-        cols[0].write("**Student**")
-        cols[1].write("**Status**")
-        cols[2].write("**Notes**")
+    if missing_columns:
+        st.error(f"Error: Missing required columns in students data: {', '.join(missing_columns)}")
+    else:
+        # Create attendance form
+        attendance_data = load_attendance(selected_date)
         
-        for student_id, data in attendance_data.items():
+        # Initialize attendance data if not exists
+        for _, student in students_df.iterrows():
+            student_id = str(student['id'])
+            if student_id not in attendance_data:
+                attendance_data[student_id] = {
+                    'name': f"{student['nombre']} {student['apellido']}".strip(),
+                    'status': 'present',
+                    'notes': ''
+                }
+        
+        # Display attendance form
+        st.subheader(f"Attendance for {selected_date.strftime('%B %d, %Y')}")
+        
+        # Create a form for attendance
+        with st.form("attendance_form"):
+            # Create headers
             cols = st.columns([3, 2, 4])
-            cols[0].write(data['name'])
-            status = cols[1].selectbox(
-                f"Status_{student_id}",
-                ["Present", "Absent", "Late", "Excused"],
-                key=f"status_{student_id}_{selected_date}",
-                index=["Present", "Absent", "Late", "Excused"].index(data.get('status', 'Present').title())
-            )
-            notes = cols[2].text_input(
-                "Notes",
-                value=data.get('notes', ''),
-                key=f"notes_{student_id}_{selected_date}"
-            )
+            cols[0].write("**Student**")
+            cols[1].write("**Status**")
+            cols[2].write("**Notes**")
             
-            # Update attendance data
-            attendance_data[student_id] = {
-                'name': data['name'],
-                'status': status.lower(),
-                'notes': notes
-            }
-        
-        if st.form_submit_button("Save Attendance"):
-            if save_attendance(selected_date, attendance_data):
-                st.success("Attendance saved successfully!")
+            # Create form fields for each student
+            for student_id, data in attendance_data.items():
+                cols = st.columns([3, 2, 4])
+                cols[0].write(data['name'])
+                status = cols[1].selectbox(
+                    f"Status_{student_id}",
+                    ["Present", "Absent", "Late", "Excused"],
+                    key=f"status_{student_id}_{selected_date}",
+                    index=["Present", "Absent", "Late", "Excused"].index(data.get('status', 'Present').title())
+                )
+                notes = cols[2].text_input(
+                    "Notes",
+                    value=data.get('notes', ''),
+                    key=f"notes_{student_id}_{selected_date}",
+                    label_visibility="collapsed"
+                )
+                
+                # Update attendance data
+                attendance_data[student_id] = {
+                    'name': data['name'],
+                    'status': status.lower(),
+                    'notes': notes
+                }
+            
+            # Add submit button
+            submitted = st.form_submit_button("Save Attendance")
+            if submitted:
+                if save_attendance(selected_date, attendance_data):
+                    st.success("Attendance saved successfully!")
 
 else:
     st.warning("Please add students first in the Students page.")
