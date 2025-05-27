@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import io
 from config import setup_page, db
 from utils import load_students
 
@@ -29,6 +30,43 @@ def load_attendance(date):
         st.error(f"Error loading attendance: {str(e)}")
         return {}
 
+def parse_attendance_report(file_content_str):
+    lines = file_content_str.splitlines()
+    participants_section_lines = []
+    in_participants_section = False
+
+    for line in lines:
+        line_stripped = line.strip()
+        if line_stripped.startswith("2. Participants"):
+            in_participants_section = True
+            continue  # Skip the "2. Participants" line itself
+        if line_stripped.startswith("3. In-Meeting Activities"):
+            in_participants_section = False
+            break  # End of section
+        
+        if in_participants_section and line_stripped:  # Collect non-empty lines within the section
+            participants_section_lines.append(line)
+            
+    if not participants_section_lines:
+        print("Warning: '2. Participants' section is empty or not found in report.")
+        return []
+
+    csv_like_data = "\n".join(participants_section_lines)
+    
+    try:
+        df = pd.read_csv(io.StringIO(csv_like_data), sep='\t')
+        if "Name" in df.columns:
+            return df["Name"].astype(str).str.strip().unique().tolist()
+        else:
+            print("Warning: Could not find 'Name' column in '2. Participants' section of report.")
+            return []
+    except pd.errors.EmptyDataError:
+        print("Warning: No data rows found in '2. Participants' section of report after parsing.")
+        return []
+    except Exception as e:
+        print(f"Error parsing '2. Participants' section of report: {e}")
+        return []
+
 # Main UI
 st.header("Record Attendance")
 
@@ -50,55 +88,105 @@ if students_df is not None and not students_df.empty:
     if missing_columns:
         st.error(f"Error: Missing required columns in students data: {', '.join(missing_columns)}")
     else:
-        # Create attendance form
         attendance_data = load_attendance(selected_date)
-        
-        # Initialize attendance data if not exists
+        present_from_reports = set()
+
+        st.subheader("Upload Attendance Reports (Optional)")
+        uploaded_reports = st.file_uploader(
+            "Upload meeting attendance CSV report(s) to auto-fill 'Present'/'Absent'",
+            type=['csv'],
+            accept_multiple_files=True,
+            key=f"report_uploader_{selected_date.strftime('%Y%m%d')}",
+            help="Upload CSV files from meetings. The system extracts names from '2. Participants' section."
+        )
+
+        if uploaded_reports:
+            processed_files_count = 0
+            with st.spinner("Processing attendance reports..."):
+                for report_file in uploaded_reports:
+                    try:
+                        file_bytes = report_file.getvalue()
+                        file_content = None
+                        encodings_to_try = ['utf-16', 'utf-8', 'utf-8-sig', 'latin-1']
+
+                        for encoding in encodings_to_try:
+                            try:
+                                file_content = file_bytes.decode(encoding)
+                                # Optional: st.info(f"Successfully decoded {report_file.name} with {encoding}")
+                                break  # Decoded successfully
+                            except UnicodeDecodeError:
+                                continue # Try next encoding
+                        
+                        if file_content is None:
+                            st.error(f"Failed to decode {report_file.name}. Tried encodings: {', '.join(encodings_to_try)}. Please ensure the file is saved with a compatible text encoding.")
+                            continue # Skip to the next file
+
+                        names_from_report = parse_attendance_report(file_content)
+                        if names_from_report:
+                            present_from_reports.update(names_from_report)
+                            processed_files_count += 1
+                        else:
+                            st.warning(f"Could not extract participant names from {report_file.name}. Check format or content of '2. Participants' section.")
+                    except Exception as e:
+                        st.error(f"An unexpected error occurred while processing file {report_file.name}: {e}")
+            
+            if processed_files_count > 0:
+                st.success(f"Processed {processed_files_count} report(s). Found {len(present_from_reports)} unique attendees. Form updated.")
+            elif uploaded_reports:
+                 st.warning("No attendees extracted from uploaded report(s). Check file format/content.")
+
+        # Initialize/update attendance data for all students in the master list
         for _, student in students_df.iterrows():
-            student_id = str(student['nombre'])
-            if student_id not in attendance_data:
-                attendance_data[student_id] = {
-                    'name': f"{student['nombre']}".strip(),
-                    'status': 'present',
+            student_name_key = str(student['nombre']).strip()
+
+            if student_name_key not in attendance_data:
+                attendance_data[student_name_key] = {
+                    'name': student_name_key,
+                    'status': 'present', 
                     'notes': ''
                 }
+            else:
+                attendance_data[student_name_key]['name'] = student_name_key
+
+            if present_from_reports: # If reports were processed
+                if student_name_key in present_from_reports:
+                    attendance_data[student_name_key]['status'] = 'present'
+                else:
+                    attendance_data[student_name_key]['status'] = 'absent'
         
-        # Display attendance form
         st.subheader(f"Attendance for {selected_date.strftime('%B %d, %Y')}")
         
-        # Create a form for attendance
         with st.form("attendance_form"):
-            # Create headers
             cols = st.columns([3, 2, 4])
             cols[0].write("**Student**")
             cols[1].write("**Status**")
             cols[2].write("**Notes**")
             
-            # Create form fields for each student
-            for student_id, data in attendance_data.items():
+            sorted_student_names = sorted(attendance_data.keys())
+            for student_id in sorted_student_names: # student_id is student_name_key
+                data = attendance_data[student_id]
                 cols = st.columns([3, 2, 4])
                 cols[0].write(data['name'])
+                current_status_index = ["Present", "Absent", "Late", "Excused"].index(data.get('status', 'present').title())
                 status = cols[1].selectbox(
                     f"Status_{student_id}",
                     ["Present", "Absent", "Late", "Excused"],
-                    key=f"status_{student_id}_{selected_date}",
-                    index=["Present", "Absent", "Late", "Excused"].index(data.get('status', 'Present').title())
+                    key=f"status_{student_id}_{selected_date.strftime('%Y%m%d')}", # UPDATED KEY
+                    index=current_status_index
                 )
                 notes = cols[2].text_input(
                     "Notes",
                     value=data.get('notes', ''),
-                    key=f"notes_{student_id}_{selected_date}",
+                    key=f"notes_{student_id}_{selected_date.strftime('%Y%m%d')}", # UPDATED KEY
                     label_visibility="collapsed"
                 )
                 
-                # Update attendance data
                 attendance_data[student_id] = {
                     'name': data['name'],
                     'status': status.lower(),
                     'notes': notes
                 }
             
-            # Add submit button
             submitted = st.form_submit_button("Save Attendance")
             if submitted:
                 if save_attendance(selected_date, attendance_data):
