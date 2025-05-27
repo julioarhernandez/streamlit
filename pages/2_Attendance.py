@@ -44,7 +44,7 @@ if students_df is not None and not students_df.empty:
     students_df.columns = students_df.columns.str.lower()
     
     # Check for required columns
-    required_columns = {'id', 'nombre', 'apellido'}
+    required_columns = {'nombre'}
     missing_columns = required_columns - set(students_df.columns)
     
     if missing_columns:
@@ -55,10 +55,10 @@ if students_df is not None and not students_df.empty:
         
         # Initialize attendance data if not exists
         for _, student in students_df.iterrows():
-            student_id = str(student['id'])
+            student_id = str(student['nombre'])
             if student_id not in attendance_data:
                 attendance_data[student_id] = {
-                    'name': f"{student['nombre']} {student['apellido']}".strip(),
+                    'name': f"{student['nombre']}".strip(),
                     'status': 'present',
                     'notes': ''
                 }
