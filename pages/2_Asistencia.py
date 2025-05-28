@@ -76,15 +76,15 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
 
     for i, line in enumerate(lines):
         line_stripped_lower = line.strip().lower()
-        if line_stripped_lower.startswith("2. participantes"):
+        if line_stripped_lower.startswith("2. participants"):
             start_marker_found_at = i
             continue 
-        if start_marker_found_at != -1 and line_stripped_lower.startswith("3. actividades en la reunión"):
+        if start_marker_found_at != -1 and line_stripped_lower.startswith("3. in-meeting activities"):
             end_marker_found_at = i
             break 
 
     if start_marker_found_at == -1:
-        st.warning(f"No se pudo encontrar el marcador de sección '2. Participantes' en '{filename_for_debug}'.")
+        st.warning(f"No se pudo encontrar el marcador de sección '2. Participants' en '{filename_for_debug}'.")
         return []
 
     actual_data_start_index = start_marker_found_at + 1
@@ -99,12 +99,11 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
     header_row_index_in_block = -1
     for i, line_in_block in enumerate(participant_data_lines):
         line_norm = line_in_block.strip().lower()
-        if "nombre" in line_norm and ("primera conexión" in line_norm or "última desconexión" in line_norm or "correo electrónico" in line_norm or "duración" in line_norm):
+        if "name" in line_norm and ("first join" in line_norm or "last leave" in line_norm or "email" in line_norm or "duration" in line_norm):
             header_row_index_in_block = i
             break
-            
     if header_row_index_in_block == -1:
-        st.warning(f"No se pudo encontrar la fila de encabezado de datos (p.ej., 'Nombre Primera Conexión...') dentro de la sección '2. Participantes' de '{filename_for_debug}'.")
+        st.warning(f"No se pudo encontrar la fila de encabezado en el archivo: {filename_for_debug}")
         return []
 
     csv_like_data_for_pandas = "\n".join(participant_data_lines[header_row_index_in_block:])
@@ -113,8 +112,8 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
         df = pd.read_csv(io.StringIO(csv_like_data_for_pandas), sep='\t')
         df.columns = [col.strip().lower() for col in df.columns] 
         
-        if "nombre" in df.columns:
-            return df["nombre"].astype(str).str.strip().unique().tolist()
+        if "name" in df.columns:
+            return df["name"].astype(str).str.strip().unique().tolist()
         else:
             st.warning(f"Columna 'nombre' no encontrada después del análisis en '{filename_for_debug}'. Columnas encontradas: {df.columns.tolist()}")
             return []
