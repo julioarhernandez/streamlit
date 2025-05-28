@@ -136,10 +136,15 @@ if df_loaded is not None and not df_loaded.empty:
         
         disabled_columns = [col for col in df_loaded.columns if col != '🗑️']
 
-        st.info("Marque la casilla '🗑️' para los estudiantes que desea eliminar, luego haga clic en 'Eliminar Estudiantes Seleccionados' abajo.")
+        st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
+        
+        # Make a copy of the dataframe for editing
+        editable_df = df_display.copy()
+        
+        # Display the editable table
         edited_df = st.data_editor(
-            df_display, 
-            disabled=disabled_columns,
+            editable_df, 
+            disabled=["🗑️"],  # Only the delete checkbox is disabled
             hide_index=True,
             column_config={
                 "🗑️": st.column_config.CheckboxColumn(
@@ -150,11 +155,41 @@ if df_loaded is not None and not df_loaded.empty:
                 ),
                 "nombre": st.column_config.TextColumn(
                     "Nombre del Estudiante",
-                    help="Nombre del estudiante",
-                    width="large" 
+                    help="Edite el nombre del estudiante",
+                    width="large",
+                    required=True
                 )
-            }
+            },
+            key="students_editor"
         )
+        
+        # Add save button
+        if st.button("💾 Guardar Cambios", key="save_changes_btn"):
+            # Check if there are any changes
+            if not edited_df['nombre'].equals(editable_df['nombre']):
+                # Create a copy of the original dataframe to modify
+                updated_df = df_loaded.copy()
+                # Update only the names that have changed
+                name_changes = edited_df[edited_df['nombre'] != editable_df['nombre']]
+                
+                # Apply changes to the original dataframe
+                for idx, row in name_changes.iterrows():
+                    original_idx = df_loaded.index[idx]
+                    updated_df.at[original_idx, 'nombre'] = row['nombre']
+                
+                # Save the updated dataframe
+                if save_students(updated_df):
+                    st.success("¡Cambios guardados exitosamente!")
+                    # Add a button to refresh the page to see changes
+                    if st.button("Actualizar página"):
+                        st.rerun()
+                else:
+                    st.error("Error al guardar los cambios. Intente nuevamente.")
+            else:
+                st.info("No se detectaron cambios para guardar.")
+                
+        st.divider()
+        st.info("Marque la casilla '🗑️' para los estudiantes que desea eliminar, luego haga clic en 'Eliminar Estudiantes Seleccionados' abajo.")
 
         students_selected_for_deletion = edited_df[edited_df['🗑️'] == True]
 
