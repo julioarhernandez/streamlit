@@ -99,18 +99,6 @@ def calculate_end_date(start_date, duration_weeks):
         return start_date + datetime.timedelta(weeks=duration_weeks)
     return None
 
-# Function to update session state
-def update_dates():
-    # Update duration
-    if 'new_module_duration' in st.session_state:
-        st.session_state.module_duration_weeks = st.session_state.new_module_duration
-    
-    # Update start dates if they exist in session state
-    if '_ciclo1_inicio' in st.session_state:
-        st.session_state.ciclo1_inicio = st.session_state._ciclo1_inicio
-    if '_ciclo2_inicio' in st.session_state:
-        st.session_state.ciclo2_inicio = st.session_state._ciclo2_inicio
-
 # Initialize session state for dates if not exists
 if 'module_duration_weeks' not in st.session_state:
     st.session_state.module_duration_weeks = 1
@@ -121,19 +109,32 @@ if 'ciclo2_inicio' not in st.session_state:
 
 # --- FORM TO ADD NEW MODULE ---
 st.subheader("Agregar Nuevo Módulo")
-with st.form("new_module_form", clear_on_submit=True):
+
+# Use a container for the form-like layout
+with st.container():
     module_name = st.text_input("Nombre del Módulo", key="new_module_name")
     module_description = st.text_area("Descripción", key="new_module_desc")
-    module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
     
-    # Duration input
-    module_duration_weeks = st.number_input(
-        "Duración (Semanas)", 
-        min_value=1, 
-        step=1, 
-        key="new_module_duration",
-        value=st.session_state.module_duration_weeks
-    )
+    # Create two columns for Orden and Duración
+    col_orden, col_duracion = st.columns(2)
+    
+    with col_orden:
+        module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
+    
+    with col_duracion:
+        # Duration input with immediate update
+        module_duration_weeks = st.number_input(
+            "Duración (Semanas)", 
+            min_value=1, 
+            step=1, 
+            key="new_module_duration",
+            value=st.session_state.module_duration_weeks
+        )
+    
+    # Update duration in session state if changed
+    if module_duration_weeks != st.session_state.module_duration_weeks:
+        st.session_state.module_duration_weeks = module_duration_weeks
+        st.rerun()
     
     # Add date inputs for Cycle 1
     st.subheader("Ciclo 1")
@@ -145,10 +146,26 @@ with st.form("new_module_form", clear_on_submit=True):
             key="_ciclo1_inicio",
             value=st.session_state.ciclo1_inicio
         )
+        
+        # Update session state if date changes
+        if ciclo1_inicio != st.session_state.ciclo1_inicio:
+            st.session_state.ciclo1_inicio = ciclo1_inicio
+            st.rerun()
     
     with col2:
-        ciclo1_fin = calculate_end_date(ciclo1_inicio, module_duration_weeks)
-        ciclo1_fin_display = st.date_input(
+        # Calculate end date using current values
+        ciclo1_fin = calculate_end_date(st.session_state.ciclo1_inicio, st.session_state.module_duration_weeks)
+        
+        # Show toast when end date changes
+        if 'prev_ciclo1_fin' not in st.session_state:
+            st.session_state.prev_ciclo1_fin = None
+            
+        if ciclo1_fin != st.session_state.prev_ciclo1_fin and st.session_state.prev_ciclo1_fin is not None:
+            st.toast(f"Ciclo 1 - Nueva fecha de fin: {ciclo1_fin}")
+            
+        st.session_state.prev_ciclo1_fin = ciclo1_fin
+        
+        st.date_input(
             "Fecha de Fin",
             value=ciclo1_fin if ciclo1_fin else datetime.date.today(),
             key="ciclo1_fin_display",
@@ -165,18 +182,34 @@ with st.form("new_module_form", clear_on_submit=True):
             key="_ciclo2_inicio",
             value=st.session_state.ciclo2_inicio
         )
+        
+        # Update session state if date changes
+        if ciclo2_inicio != st.session_state.ciclo2_inicio:
+            st.session_state.ciclo2_inicio = ciclo2_inicio
+            st.rerun()
     
     with col4:
-        ciclo2_fin = calculate_end_date(ciclo2_inicio, module_duration_weeks)
-        ciclo2_fin_display = st.date_input(
+        # Calculate end date using current values
+        ciclo2_fin = calculate_end_date(st.session_state.ciclo2_inicio, st.session_state.module_duration_weeks)
+        
+        # Show toast when end date changes
+        if 'prev_ciclo2_fin' not in st.session_state:
+            st.session_state.prev_ciclo2_fin = None
+            
+        if ciclo2_fin != st.session_state.prev_ciclo2_fin and st.session_state.prev_ciclo2_fin is not None:
+            st.toast(f"Ciclo 2 - Nueva fecha de fin: {ciclo2_fin}")
+            
+        st.session_state.prev_ciclo2_fin = ciclo2_fin
+        
+        st.date_input(
             "Fecha de Fin",
             value=ciclo2_fin if ciclo2_fin else datetime.date.today(),
             key="ciclo2_fin_display",
             disabled=True
         )
     
-    # Add a submit button
-    submitted_new_module = st.form_submit_button("Agregar Módulo", on_click=update_dates)
+    # Add a submit button that will handle the form submission
+    submitted_new_module = st.button("Agregar Módulo")
 
     if submitted_new_module and user_email:
         if not module_name:
