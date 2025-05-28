@@ -29,7 +29,8 @@ if uploaded_file is not None:
             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
             
             st.subheader("Vista Previa del Archivo Subido")
-            st.dataframe(df_upload.head())
+            st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
+            st.dataframe(df_upload)
             
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
                 if save_students(df_upload):

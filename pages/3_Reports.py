@@ -33,7 +33,7 @@ end_date = st.date_input("Fecha de Fin", today, key="report_end_date") # Transla
 if start_date > end_date:
     st.error("Error: La fecha de inicio no puede ser posterior a la fecha de fin.") # Translated
 else:
-    if st.button("Generar Reporte", key="generate_report_btn"): # Translated
+    if st.button("Generar Reporte", key="generate_report_btn", type="primary"): # Translated
         # 1. Load all students
         all_students_df, _ = load_students()
         if all_students_df is None or all_students_df.empty:
