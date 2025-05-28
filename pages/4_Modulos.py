@@ -345,22 +345,40 @@ if user_email:
             st.error("Error: 'module_id' no encontrado en los datos. No se puede mostrar el editor de módulos de forma segura.")
             st.stop()
             
-        # Create the data editor with row deletion enabled
+        # Create the data editor with row deletion enabled but no adding new rows
         columns_to_show = ['module_id', 'firebase_key'] + [col for col in display_cols_in_editor if col != 'firebase_key']
+        
+        # Make a copy of the dataframe to work with
+        df_to_edit = modules_df_from_db[columns_to_show].copy()
+        
+        # Add a delete button column
+        df_to_edit['Eliminar'] = False
+        
+        # Configure columns for the editor
+        column_config = {
+            **final_column_config,
+            "module_id": None,  # Hide module_id from display
+            "firebase_key": final_column_config.get("firebase_key", None),  # Show the firebase_key
+            "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar")
+        }
+        
+        # Show the editor with the delete checkbox
         edited_df = st.data_editor(
-            modules_df_from_db[columns_to_show].copy(),
-            column_config={
-                **final_column_config,
-                "module_id": None,  # This hides the column from display
-                "firebase_key": final_column_config.get("firebase_key", None)  # Show the firebase_key
-            },
+            df_to_edit,
+            column_config=column_config,
             hide_index=True,
-            num_rows="dynamic",
+            num_rows="fixed",  # Prevents adding new rows
             key="modules_editor_main",
             use_container_width=True,
-            disabled=("module_id", "firebase_key"), 
-            on_change=None 
+            disabled=("module_id", "firebase_key"),
+            on_change=None
         )
+        
+        # Check for rows marked for deletion
+        if 'Eliminar' in edited_df.columns:
+            rows_to_delete = edited_df[edited_df['Eliminar'] == True]
+            if not rows_to_delete.empty:
+                st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
         
         # Detect if rows were removed in the data_editor UI and no confirmation is currently active
         if 'firebase_key' in edited_df.columns and not st.session_state.ids_to_delete:
