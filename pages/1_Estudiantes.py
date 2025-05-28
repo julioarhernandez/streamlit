@@ -13,6 +13,12 @@ if not st.session_state.get('logged_in', False):
 # Setup page title (now that config is done and user is logged in)
 setup_page("Gestión de Estudiantes")
 
+# Load current students to display count
+df_loaded, _ = load_students()
+if df_loaded is not None and not df_loaded.empty:
+    st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
+    st.divider()
+
 # Main UI
 # st.header("Gestionar Estudiantes") # st.title is usually sufficient for the main page title
 
@@ -117,7 +123,7 @@ if submit_add_students_text:
 st.divider()
 
 # --- Display and Manage Current Students ---
-st.subheader("Estudiantes Actuales")
+st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded)})")
 df_loaded, _ = load_students()
 
 if df_loaded is not None and not df_loaded.empty:
