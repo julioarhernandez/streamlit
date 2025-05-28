@@ -144,7 +144,7 @@ if df_loaded is not None and not df_loaded.empty:
         # Display the editable table
         edited_df = st.data_editor(
             editable_df, 
-            disabled=["🗑️"],  # Only the delete checkbox is disabled
+            disabled=[],  # Make all columns editable
             hide_index=True,
             column_config={
                 "🗑️": st.column_config.CheckboxColumn(
@@ -187,10 +187,6 @@ if df_loaded is not None and not df_loaded.empty:
                     st.error("Error al guardar los cambios. Intente nuevamente.")
             else:
                 st.info("No se detectaron cambios para guardar.")
-                
-        st.divider()
-        st.info("Marque la casilla '🗑️' para los estudiantes que desea eliminar, luego haga clic en 'Eliminar Estudiantes Seleccionados' abajo.")
-
         students_selected_for_deletion = edited_df[edited_df['🗑️'] == True]
 
         if not students_selected_for_deletion.empty:
