@@ -264,8 +264,10 @@ if st.session_state.prepared_attendance_dfs:
 
         if selected_date_obj in st.session_state.prepared_attendance_dfs:
             df_to_edit = st.session_state.prepared_attendance_dfs[selected_date_obj]
-            
-            st.markdown(f"#### Asistencia para: {selected_date_obj.strftime('%A, %d de %B de %Y')}")
+
+            total_attended = df_to_edit['Presente'].value_counts().get(True, 0)
+
+            st.markdown(f"#### Asistencia para: {selected_date_obj.strftime('%A, %d de %B de %Y')} ({total_attended} de {len(df_to_edit)})")
             
             edited_df = st.data_editor(
                 df_to_edit,
@@ -278,7 +280,9 @@ if st.session_state.prepared_attendance_dfs:
             )
             st.session_state.prepared_attendance_dfs[selected_date_obj] = edited_df # Update with edits
 
-            col1, col2 = st.columns(2)
+
+            
+            col1, col2, _= st.columns([4,3,3])
             with col1:
                 if st.button(f"Guardar Asistencia para {selected_date_str}", key=f"save_{selected_date_str}"):
                     attendance_data_to_save = edited_df.to_dict('records')
@@ -290,7 +294,7 @@ if st.session_state.prepared_attendance_dfs:
                     else:
                         st.error(f"Error al guardar asistencia para {selected_date_str}.")
             with col2:
-                if st.button("Borrar Todos los Datos Cargados y Empezar de Nuevo", type="primary"):
+                if st.button("Limpiar Datos Cargados", type="primary"):
                     st.session_state.current_batch_data_by_date = {}
                     st.session_state.prepared_attendance_dfs = {}
                     st.session_state.processed_files_this_session = set()
