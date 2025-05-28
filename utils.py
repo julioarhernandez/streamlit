@@ -82,3 +82,54 @@ def load_attendance(date: datetime.date) -> dict:
         return {}
 
 # --- Module Management Functions ---
+def delete_student(student_nombre_to_delete: str) -> bool:
+    """Delete a student from the Firebase list by their 'nombre'."""
+    try:
+        current_students_df, _ = load_students() # We don't need the filename here
+        if current_students_df is None:
+            st.error("No students found to delete from.")
+            return False
+
+        # Normalize the name to delete for comparison, similar to how names are stored/loaded
+        normalized_name_to_delete = str(student_nombre_to_delete).lower().strip()
+
+        # Create a boolean series for rows to keep
+        # Ensure 'nombre' column exists and is string type for comparison
+        if 'nombre' not in current_students_df.columns:
+            st.error("Student data is missing 'nombre' column. Cannot delete.")
+            return False
+        
+        # Filter out the student to delete
+        # Compare normalized versions
+        students_to_keep_df = current_students_df[
+            current_students_df['nombre'].astype(str).str.lower().str.strip() != normalized_name_to_delete
+        ]
+
+        if len(students_to_keep_df) == len(current_students_df):
+            st.warning(f"Student '{student_nombre_to_delete}' not found in the list.")
+            return False # Or True, if not finding is not an error
+
+        # Save the modified DataFrame (which overwrites the old list)
+        if save_students(students_to_keep_df):
+            st.success(f"Student '{student_nombre_to_delete}' deleted successfully.")
+            return True
+        else:
+            # save_students would have shown an error
+            return False
+            
+    except Exception as e:
+        st.error(f"Error deleting student '{student_nombre_to_delete}': {str(e)}")
+        return False
+
+def save_attendance(date: datetime.date, attendance_data: list):
+    """Save attendance data to Firebase for a specific date."""
+    try:
+        user_email = st.session_state.email.replace('.', ',')
+        date_str = date.strftime('%Y-%m-%d')
+        # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
+        # For now, assuming they are simple strings.
+        db.child("attendance").child(user_email).child(date_str).set(attendance_data)
+        return True
+    except Exception as e:
+        st.error(f"Error saving attendance for {date_str}: {str(e)}")
+        return False
