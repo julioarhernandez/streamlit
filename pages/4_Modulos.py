@@ -112,8 +112,14 @@ st.subheader("Agregar Nuevo Módulo")
 
 # Use a container for the form-like layout
 with st.container():
-    module_name = st.text_input("Nombre del Módulo", key="new_module_name")
-    module_description = st.text_area("Descripción", key="new_module_desc")
+    # Create two columns for Nombre and Descripción
+    col_nombre, col_desc = st.columns([1, 1])  # Descripción gets more space as it's typically longer
+    
+    with col_nombre:
+        module_name = st.text_input("Nombre del Módulo", key="new_module_name")
+    
+    with col_desc:
+        module_description = st.text_input("Descripción", key="new_module_desc")
     
     # Create two columns for Orden and Duración
     col_orden, col_duracion = st.columns(2)
@@ -160,8 +166,8 @@ with st.container():
         if 'prev_ciclo1_fin' not in st.session_state:
             st.session_state.prev_ciclo1_fin = None
             
-        if ciclo1_fin != st.session_state.prev_ciclo1_fin and st.session_state.prev_ciclo1_fin is not None:
-            st.toast(f"Ciclo 1 - Nueva fecha de fin: {ciclo1_fin}")
+        # if ciclo1_fin != st.session_state.prev_ciclo1_fin and st.session_state.prev_ciclo1_fin is not None:
+        #     st.toast(f"Ciclo 1 - Nueva fecha de fin: {ciclo1_fin}")
             
         st.session_state.prev_ciclo1_fin = ciclo1_fin
         
@@ -196,8 +202,8 @@ with st.container():
         if 'prev_ciclo2_fin' not in st.session_state:
             st.session_state.prev_ciclo2_fin = None
             
-        if ciclo2_fin != st.session_state.prev_ciclo2_fin and st.session_state.prev_ciclo2_fin is not None:
-            st.toast(f"Ciclo 2 - Nueva fecha de fin: {ciclo2_fin}")
+        # if ciclo2_fin != st.session_state.prev_ciclo2_fin and st.session_state.prev_ciclo2_fin is not None:
+        #     st.toast(f"Ciclo 2 - Nueva fecha de fin: {ciclo2_fin}")
             
         st.session_state.prev_ciclo2_fin = ciclo2_fin
         
