@@ -4,64 +4,60 @@ from config import setup_page
 from utils import save_students, load_students
 
 # Setup page
-setup_page("Students Management")
+setup_page("Gestión de Estudiantes")
 
 # Main UI
-st.header("Manage Students")
+st.header("Gestionar Estudiantes")
 
 # File upload section
-uploaded_file = st.file_uploader("Upload Students File (CSV or Excel)", 
+uploaded_file = st.file_uploader("Subir Archivo de Estudiantes (CSV o Excel)", 
                                type=['csv'])
 
 if uploaded_file is not None:
     try:
-        df_upload = pd.read_csv(uploaded_file) # Renamed to df_upload to avoid conflict
+        df_upload = pd.read_csv(uploaded_file)
     
-        # Normalize column names (convert to lowercase)
         df_upload.columns = df_upload.columns.str.lower().str.strip()
         
-        # Check for required columns
         required_columns = {'nombre'}
         missing_columns = required_columns - set(df_upload.columns)
         
         if missing_columns:
-            st.error(f"Error: The uploaded file is missing required columns: {', '.join(missing_columns)}. "
-                    f"Please make sure your file includes these columns: nombre")
+            st.error(f"Error: El archivo subido no contiene las columnas requeridas: {', '.join(missing_columns)}. " 
+                    f"Por favor asegúrese de que su archivo incluya estas columnas: nombre")
         else:
-            # Ensure ID is string and trim whitespace from string columns
-            df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip() # Ensure 'nombre' is string
+            df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
             
-            # Show preview
-            st.subheader("Preview of Uploaded File")
+            st.subheader("Vista Previa del Archivo Subido")
             st.dataframe(df_upload.head())
             
-            if st.button("Save Uploaded Students (replaces existing list)"):
+            if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
                 if save_students(df_upload):
-                    st.success("Students data from file saved successfully! Existing list was replaced.")
+                    st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
                     st.rerun()
     
     except Exception as e:
-        st.error(f"Error processing file: {str(e)}")
-        st.error("Please make sure the file is not open in another program and try again.")
+        st.error(f"Error procesando el archivo: {str(e)}")
+        st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
 
 st.divider()
 
 # --- Add Multiple Students via Text Area ---
-st.subheader("Add Multiple Students via Text Area")
-st.caption("Enter one student name per line. Duplicates and existing names will be skipped.")
+st.subheader("Agregar Múltiples Estudiantes mediante Área de Texto")
+st.caption("Ingrese un nombre de estudiante por línea. Los duplicados y nombres existentes serán omitidos.")
 with st.form(key="add_students_textarea_form", clear_on_submit=True):
-    students_text_area = st.text_area("Student Names (one per line)", height=150)
-    submit_add_students_text = st.form_submit_button("Add Students from Text")
+    students_text_area = st.text_area("Nombres de Estudiantes (uno por línea)", height=150)
+    submit_add_students_text = st.form_submit_button("Agregar Estudiantes desde Texto")
 
 if submit_add_students_text:
     if not students_text_area.strip():
-        st.warning("Text area is empty. Please enter student names.")
+        st.warning("El área de texto está vacía. Por favor, ingrese nombres de estudiantes.")
     else:
         lines = students_text_area.strip().split('\n')
         potential_new_names = [line.strip() for line in lines if line.strip()]
         
         if not potential_new_names:
-            st.warning("No valid student names found in the text area after processing.")
+            st.warning("No se encontraron nombres de estudiantes válidos en el área de texto después del procesamiento.")
         else:
             current_students_df, _ = load_students()
             if current_students_df is None:
@@ -78,70 +74,70 @@ if submit_add_students_text:
             skipped_names = []
             students_to_add_list = []
             
-            # Deduplicate within the input list first, preserving order
             unique_potential_new_names = []
             seen_in_input = set()
             for name in potential_new_names:
                 normalized_name = name.lower().strip()
                 if normalized_name not in seen_in_input:
-                    unique_potential_new_names.append(name) # Keep original casing for adding
+                    unique_potential_new_names.append(name)
                     seen_in_input.add(normalized_name)
             
             for name in unique_potential_new_names:
-                normalized_name = name.lower().strip() # Compare with normalized
+                normalized_name = name.lower().strip()
                 if normalized_name not in existing_normalized_names:
-                    students_to_add_list.append({'nombre': name}) # Add with original casing
+                    students_to_add_list.append({'nombre': name})
                     added_count += 1
                 else:
                     skipped_names.append(name)
             
             if not students_to_add_list:
-                st.info("No new students to add. All names provided either already exist or were duplicates in the input.")
+                st.info("No hay nuevos estudiantes para agregar. Todos los nombres proporcionados ya existen o eran duplicados en la entrada.")
                 if skipped_names:
-                    st.caption(f"Skipped names (already exist or duplicates): {', '.join(skipped_names)}")
+                    st.caption(f"Nombres omitidos (ya existen o duplicados): {', '.join(skipped_names)}")
             else:
                 new_students_df = pd.DataFrame(students_to_add_list)
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
                 
                 if save_students(updated_students_df):
-                    st.success(f"{added_count} student(s) added successfully!")
+                    st.success(f"¡{added_count} estudiante(s) agregado(s) exitosamente!")
                     if skipped_names:
-                        st.caption(f"Skipped names (already exist or duplicates in input): {', '.join(skipped_names)}")
+                        st.caption(f"Nombres omitidos (ya existen o duplicados en la entrada): {', '.join(skipped_names)}")
                     st.rerun()
                 else:
-                    st.error("Failed to add students from text area.")
+                    st.error("Error al agregar estudiantes desde el área de texto.")
 
 st.divider()
 
 # --- Display and Manage Current Students ---
-st.subheader("Current Students")
-
-# Show existing data
+st.subheader("Estudiantes Actuales")
 df_loaded, _ = load_students()
 
 if df_loaded is not None and not df_loaded.empty:
     if 'nombre' not in df_loaded.columns:
-        st.error("Student data is missing the 'nombre' column, which is required.")
+        st.error("Los datos de los estudiantes no tienen la columna 'nombre', que es obligatoria.")
     else:
-        # Prepare DataFrame for st.data_editor
         df_display = df_loaded.copy()
         if '🗑️' not in df_display.columns:
-            df_display.insert(0, '🗑️', False) # Add selection column at the beginning
+            df_display.insert(0, '🗑️', False)
         
-        # Make 'nombre' non-editable, other columns can be edited if needed by user
-        # For now, focus is on deletion, so let's make all original data non-editable.
         disabled_columns = [col for col in df_loaded.columns if col != '🗑️']
 
-        st.info("Check the '🗑️' box for students you wish to delete, then click 'Delete Selected Students' below.")
+        st.info("Marque la casilla '🗑️' para los estudiantes que desea eliminar, luego haga clic en 'Eliminar Estudiantes Seleccionados' abajo.")
         edited_df = st.data_editor(
             df_display, 
-            disabled=disabled_columns, # Make original data columns non-editable
+            disabled=disabled_columns,
             hide_index=True,
             column_config={
                 "🗑️": st.column_config.CheckboxColumn(
-                    "Delete?",
-                    help="Select students to delete",
+                    "🗑️",
+                    help="Seleccione estudiantes para eliminar",
                     default=False,
+                    width="small"
+                ),
+                "nombre": st.column_config.TextColumn(
+                    "Nombre del Estudiante",
+                    help="Nombre del estudiante",
+                    width="large" 
                 )
             }
         )
@@ -149,13 +145,12 @@ if df_loaded is not None and not df_loaded.empty:
         students_selected_for_deletion = edited_df[edited_df['🗑️'] == True]
 
         if not students_selected_for_deletion.empty:
-            if st.button("Delete Selected Students", type="primary"):
+            if st.button("Eliminar Estudiantes Seleccionados", type="primary"):
                 names_to_delete = students_selected_for_deletion['nombre'].tolist()
                 
-                # Perform batch deletion
                 current_students_df_from_db, _ = load_students()
                 if current_students_df_from_db is None:
-                    st.error("Could not reload student data to perform deletion. Please try again.")
+                    st.error("No se pudieron recargar los datos de los estudiantes para realizar la eliminación. Por favor, inténtelo de nuevo.")
                 else:
                     normalized_names_to_delete = {str(name).lower().strip() for name in names_to_delete}
                     
@@ -164,18 +159,14 @@ if df_loaded is not None and not df_loaded.empty:
                     ]
                     
                     if save_students(students_to_keep_df):
-                        st.success(f"{len(names_to_delete)} student(s) deleted successfully!")
+                        st.success(f"¡{len(names_to_delete)} estudiante(s) eliminado(s) exitosamente!")
                         st.rerun()
                     else:
-                        st.error("Failed to save changes after attempting to delete students.")
+                        st.error("Error al guardar los cambios después de intentar eliminar estudiantes.")
         elif any(edited_df['🗑️']):
-             # This case might occur if boxes were checked then unchecked before button press
-             # or if the button is shown even with no selections initially.
-             # For a cleaner UI, the button could be conditionally shown only if selections exist.
-             # For now, just ensure no action if button pressed with no actual selections.
              pass 
 
 elif df_loaded is not None and df_loaded.empty:
-    st.info("The student list is currently empty. Upload a file to add students.")
-else: # df_loaded is None (error loading or no data)
-    st.info("No students data found or failed to load. Please upload a file to get started.")
+    st.info("La lista de estudiantes está actualmente vacía. Suba un archivo para agregar estudiantes.")
+else:
+    st.info("No se encontraron datos de estudiantes o falló la carga. Por favor, suba un archivo para comenzar.")
