@@ -358,7 +358,7 @@ if user_email:
         column_config = {
             **final_column_config,
             "module_id": None,  # Hide module_id from display
-            "firebase_key": final_column_config.get("firebase_key", None),  # Show the firebase_key
+            "firebase_key": None,  # Hide firebase_key from display but keep in data
             "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar")
         }
         
