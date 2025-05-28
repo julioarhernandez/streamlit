@@ -25,5 +25,5 @@ def check_auth():
 
 def setup_page(title):
     """Common page setup with title."""
-    st.set_page_config(page_title=title, layout="wide")
+    st.set_page_config(page_title=title, layout="centered")
     st.title(title)

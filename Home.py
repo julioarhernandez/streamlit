@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(
     page_title="Sistema de Gestión Estudiantil",
     page_icon="🎓",
-    layout="wide"
+    layout="centered"
 )
 
 # Custom CSS for better styling
@@ -79,8 +79,17 @@ if not st.session_state.logged_in:
     # For now, Streamlit will show 'index' in the sidebar.
 
 else:
-    st.sidebar.title(f"Bienvenido,")
-    st.sidebar.write(st.session_state.email)
+    user_name = "Usuario"
+    if st.session_state.get('email'):
+        try:
+            name_part = st.session_state.email.split('@')[0]
+            user_name = name_part.capitalize()
+        except Exception:
+            pass # Keep 'Usuario' if email format is unexpected
+
+    st.sidebar.title(f"Bienvenido, {user_name}")
+    if st.session_state.get('email'): # Check if email exists before writing
+        st.sidebar.write(st.session_state.email)
     if st.sidebar.button("Cerrar Sesión"):
         logout_user()
     
