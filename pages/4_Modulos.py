@@ -1,132 +1,294 @@
 import streamlit as st
 import pandas as pd
-from config import setup_page, db
+import datetime
+import uuid # For generating unique module IDs
+from config import setup_page, db # Assuming db is initialized in config.py
 
-# Setup page
-setup_page("Modules Management")
-
-def save_module(module_data):
-    """Save module data to Firebase"""
+# Function to save a new module to Firebase
+def save_new_module_to_db(user_email, module_data):
     try:
-        user_email = st.session_state.email.replace('.', ',')
-        module_id = module_data['module_id']
-        db.child("modules").child(user_email).child(module_id).set(module_data)
+        user_email_sanitized = user_email.replace('.', ',')
+        # Create a new reference for a module, or use module_id if provided and unique
+        # For simplicity, let's assume we push to create a new unique ID by Firebase
+        db.child("modules").child(user_email_sanitized).push(module_data)
         return True
     except Exception as e:
-        st.error(f"Error saving module: {str(e)}")
+        st.error(f"Error saving module to Firebase: {e}")
         return False
 
-def load_modules():
-    """Load all modules for the current user"""
+# Function to delete a module
+def delete_module_from_db(user_email, module_id):
+    # Initialize session state for tracking shown toasts if it doesn't exist
+    if 'shown_toasts' not in st.session_state:
+        st.session_state.shown_toasts = set()
+    
+    # Check if we've already shown a toast for this module_id
+    if module_id in st.session_state.shown_toasts:
+        return True  # Skip showing the toast again
+        
     try:
-        user_email = st.session_state.email.replace('.', ',')
-        modules = db.child("modules").child(user_email).get().val()
-        if modules:
-            return pd.DataFrame(modules).T
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Error loading modules: {str(e)}")
-        return pd.DataFrame()
-
-def delete_module(module_id):
-    """Delete a module"""
-    try:
-        user_email = st.session_state.email.replace('.', ',')
-        db.child("modules").child(user_email).child(module_id).remove()
+        user_email_sanitized = user_email.replace('.', ',')
+        db.child("modules").child(user_email_sanitized).child(module_id).remove()
+        
+        # Mark this module_id as having shown a toast
+        st.session_state.shown_toasts.add(module_id)
+        
+        # Show toast only once
+        st.toast(f"Módulo ID: {module_id} eliminado.")
         return True
     except Exception as e:
-        st.error(f"Error deleting module: {str(e)}")
+        st.error(f"Error deleting module {module_id}: {e}")
         return False
 
-# Main UI
-st.header("Manage Modules")
+# Function to load all modules for the current user from Firebase.
+def load_modules(user_email_from_session):
+    if not user_email_from_session:
+        return pd.DataFrame()
+    try:
+        user_email_sanitized = user_email_from_session.replace('.', ',')
+        modules_data = db.child("modules").child(user_email_sanitized).get().val()
 
-# Add/Edit Module Form
-with st.expander("Add/Edit Module", expanded=True):
-    with st.form("module_form"):
-        module_id = st.text_input("Module ID")
-        module_name = st.text_input("Module Name")
-        module_description = st.text_area("Description")
-        module_credits = st.number_input("Credits", min_value=0, value=3, step=1)
-        module_duration = st.number_input("Duration (weeks)", min_value=1, value=12, step=1)
-        
-        submitted = st.form_submit_button("Save Module")
-        
-        if submitted:
-            if not module_id or not module_name:
-                st.error("Module ID and Name are required")
+        if not modules_data:
+            df = pd.DataFrame()
+        elif isinstance(modules_data, list):
+            processed_list = [item for item in modules_data if item is not None and isinstance(item, dict)]
+            if not processed_list:
+                df = pd.DataFrame()
             else:
-                module_data = {
-                    'module_id': module_id,
-                    'name': module_name,
-                    'description': module_description,
-                    'credits': module_credits,
-                    'duration_weeks': module_duration,
-                    'created_at': pd.Timestamp.now().isoformat()
-                }
-                if save_module(module_data):
-                    st.success(f"Module '{module_name}' saved successfully!")
-                    st.rerun()
+                df = pd.DataFrame(processed_list)
+        elif isinstance(modules_data, dict):
+            processed_list = []
+            for key, item in modules_data.items():
+                if item is not None and isinstance(item, dict):
+                    if 'module_id' not in item: # If item doesn't have its own module_id field
+                        item['module_id'] = key # Use Firebase key as module_id
+                    processed_list.append(item)
+            if not processed_list:
+                df = pd.DataFrame()
+            else:
+                df = pd.DataFrame(processed_list)
+        else:
+            st.warning(f"Unexpected data type for modules: {type(modules_data)}")
+            df = pd.DataFrame()
+        
+        # Ensure all expected columns are present in the DataFrame
+        expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at']
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = None # Add missing column and fill with None
+        
+        return df
 
-# Display existing modules
-st.header("Current Modules")
-modules_df = load_modules()
+    except Exception as e:
+        st.error(f"Error loading modules from Firebase: {e}")
+        # Return an empty DataFrame with expected columns in case of error too
+        return pd.DataFrame(columns=expected_cols)
 
-if not modules_df.empty:
-    # Display as a nice table
-    st.dataframe(
-        modules_df[['name', 'description', 'credits', 'duration_weeks']],
-        column_config={
-            'name': 'Module Name',
-            'description': 'Description',
-            'credits': 'Credits',
-            'duration_weeks': 'Duration (weeks)'
-        },
-        use_container_width=True
+# --- Page Setup and Login Check ---
+setup_page("Gestión de Módulos")
+if not st.session_state.get('logged_in', False):
+    st.error("Debe iniciar sesión para acceder a esta página.")
+    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.stop()
+
+user_email = st.session_state.get('email')
+
+# Function to calculate end date based on start date and duration
+def calculate_end_date(start_date, duration_weeks):
+    if start_date and duration_weeks:
+        return start_date + datetime.timedelta(weeks=duration_weeks)
+    return None
+
+# Function to update session state
+def update_dates():
+    # Update duration
+    if 'new_module_duration' in st.session_state:
+        st.session_state.module_duration_weeks = st.session_state.new_module_duration
+    
+    # Update start dates if they exist in session state
+    if '_ciclo1_inicio' in st.session_state:
+        st.session_state.ciclo1_inicio = st.session_state._ciclo1_inicio
+    if '_ciclo2_inicio' in st.session_state:
+        st.session_state.ciclo2_inicio = st.session_state._ciclo2_inicio
+
+# Initialize session state for dates if not exists
+if 'module_duration_weeks' not in st.session_state:
+    st.session_state.module_duration_weeks = 1
+if 'ciclo1_inicio' not in st.session_state:
+    st.session_state.ciclo1_inicio = datetime.date.today()
+if 'ciclo2_inicio' not in st.session_state:
+    st.session_state.ciclo2_inicio = datetime.date.today()
+
+# --- FORM TO ADD NEW MODULE ---
+st.subheader("Agregar Nuevo Módulo")
+with st.form("new_module_form", clear_on_submit=True):
+    module_name = st.text_input("Nombre del Módulo", key="new_module_name")
+    module_description = st.text_area("Descripción", key="new_module_desc")
+    module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
+    
+    # Duration input
+    module_duration_weeks = st.number_input(
+        "Duración (Semanas)", 
+        min_value=1, 
+        step=1, 
+        key="new_module_duration",
+        value=st.session_state.module_duration_weeks
     )
     
-    # Add delete button for each module
-    for _, module in modules_df.iterrows():
-        if st.button(f"Delete {module['name']}", key=f"del_{module['module_id']}"):
-            if delete_module(module['module_id']):
-                st.success(f"Module '{module['name']}' deleted successfully!")
+    # Add date inputs for Cycle 1
+    st.subheader("Ciclo 1")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        ciclo1_inicio = st.date_input(
+            "Fecha de Inicio", 
+            key="_ciclo1_inicio",
+            value=st.session_state.ciclo1_inicio
+        )
+    
+    with col2:
+        ciclo1_fin = calculate_end_date(ciclo1_inicio, module_duration_weeks)
+        ciclo1_fin_display = st.date_input(
+            "Fecha de Fin",
+            value=ciclo1_fin if ciclo1_fin else datetime.date.today(),
+            key="ciclo1_fin_display",
+            disabled=True
+        )
+    
+    # Add date inputs for Cycle 2
+    st.subheader("Ciclo 2")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        ciclo2_inicio = st.date_input(
+            "Fecha de Inicio",
+            key="_ciclo2_inicio",
+            value=st.session_state.ciclo2_inicio
+        )
+    
+    with col4:
+        ciclo2_fin = calculate_end_date(ciclo2_inicio, module_duration_weeks)
+        ciclo2_fin_display = st.date_input(
+            "Fecha de Fin",
+            value=ciclo2_fin if ciclo2_fin else datetime.date.today(),
+            key="ciclo2_fin_display",
+            disabled=True
+        )
+    
+    # Add a submit button
+    submitted_new_module = st.form_submit_button("Agregar Módulo", on_click=update_dates)
+
+    if submitted_new_module and user_email:
+        if not module_name:
+            st.warning("El nombre del módulo es obligatorio.")
+        else:
+            new_module_data = {
+                'module_id': str(uuid.uuid4()), # Generate a unique ID
+                'name': module_name,
+                'description': module_description,
+                'credits': module_credits,
+                'duration_weeks': module_duration_weeks,
+                'ciclo1_inicio': ciclo1_inicio.isoformat() if 'ciclo1_inicio' in locals() else None,
+                'ciclo1_fin': calculate_end_date(ciclo1_inicio, module_duration_weeks).isoformat() if 'ciclo1_inicio' in locals() and ciclo1_inicio else None,
+                'ciclo2_inicio': ciclo2_inicio.isoformat() if 'ciclo2_inicio' in locals() else None,
+                'ciclo2_fin': calculate_end_date(ciclo2_inicio, module_duration_weeks).isoformat() if 'ciclo2_inicio' in locals() and ciclo2_inicio else None,
+                'created_at': datetime.datetime.now().isoformat()
+            }
+            if save_new_module_to_db(user_email, new_module_data):
+                st.success(f"Módulo '{module_name}' guardado exitosamente!")
                 st.rerun()
-else:
-    st.info("No modules found. Add a new module using the form above.")
+            else:
+                st.error("No se pudo guardar el módulo.")
+    elif submitted_new_module and not user_email:
+        st.error("Error de sesión. No se pudo obtener el email del usuario.")
 
-# Module Enrollment
-st.header("Module Enrollment")
+# --- DISPLAY/EDIT EXISTING MODULES ---
+st.divider()
+if user_email:
+    modules_df_from_db = load_modules(user_email) # Renamed to clarify source
 
-# Load students for enrollment
-students_df, _ = load_students()
+    # --- Debugging Information (Optional) ---
+    # st.subheader("Información de Depuración de Módulos (Post-Carga)")
+    # if isinstance(modules_df_from_db, pd.DataFrame):
+    #     st.write("Columnas de modules_df:", modules_df_from_db.columns.tolist() if not modules_df_from_db.empty else "DataFrame vacío")
+    #     st.write("Primeras filas de modules_df:", modules_df_from_db.head())
+    #     st.write("¿modules_df está vacío?", modules_df_from_db.empty)
+    # else:
+    #     st.write("modules_df no es un DataFrame. Tipo:", type(modules_df_from_db))
 
-if not modules_df.empty and students_df is not None and not students_df.empty:
-    with st.form("enrollment_form"):
-        selected_module = st.selectbox(
-            "Select Module",
-            modules_df['name'].tolist(),
-            format_func=lambda x: f"{x} ({modules_df[modules_df['name'] == x]['module_id'].iloc[0]})"
+    if modules_df_from_db.empty:
+        st.info("No hay módulos existentes para este usuario. Puede agregar nuevos módulos utilizando el formulario anterior.")
+    else:
+        st.subheader("Módulos Existentes")
+        
+        # Store original module_ids to detect deletions
+        if 'module_id' in modules_df_from_db.columns:
+            original_module_ids = set(modules_df_from_db['module_id'].dropna().tolist())
+        else:
+            original_module_ids = set()
+            st.warning("La columna 'module_id' no se encontró. La detección de eliminaciones no funcionará correctamente.")
+
+        editable_cols_config = {
+            "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
+            "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
+            "description": st.column_config.TextColumn("Descripción"),
+            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, help="Número de orden del módulo"),
+            "duration_weeks": st.column_config.NumberColumn("Duración (Semanas)", format="%d", min_value=1)
+            # 'created_at' could also be displayed as disabled if desired
+        }
+        
+        display_cols_in_editor = []
+        final_column_config = {}
+
+        # Define the order of columns for display (module_id will be hidden but kept in data)
+        display_columns = ['name', 'description', 'duration_weeks', 'credits']  # Moved credits to the end as 'Orden'
+        
+        # Configure which columns are shown and how
+        for col_key in display_columns:
+            if col_key in modules_df_from_db.columns:
+                display_cols_in_editor.append(col_key)
+                if col_key in editable_cols_config:
+                    final_column_config[col_key] = editable_cols_config[col_key]
+        
+        # Ensure module_id exists in the data even if not displayed
+        if 'module_id' not in modules_df_from_db.columns:
+            st.error("Error: 'module_id' no encontrado en los datos. No se puede mostrar el editor de módulos de forma segura.")
+            st.stop()
+            
+        # Create the data editor with visible columns only
+        edited_df = st.data_editor(
+            modules_df_from_db[['module_id'] + display_cols_in_editor],  # Include module_id in data but not in display
+            column_config={
+                **final_column_config,
+                "module_id": None  # This hides the column from display
+            },
+            hide_index=True,
+            num_rows="dynamic",
+            key="modules_editor_main",
+            use_container_width=True
         )
         
-        # Get module ID
-        module_id = modules_df[modules_df['name'] == selected_module]['module_id'].iloc[0]
-        
-        # Display students for enrollment
-        st.subheader("Enroll Students")
-        
-        # Create a multi-select for students
-        student_options = [f"{row['Nombre']} {row['Apellido']} ({row['ID']})" for _, row in students_df.iterrows()]
-        selected_students = st.multiselect(
-            "Select students to enroll",
-            student_options,
-            key=f"enroll_{module_id}"
-        )
-        
-        if st.form_submit_button("Save Enrollments"):
-            # Here you would save the enrollments to Firebase
-            st.success(f"Enrolled {len(selected_students)} students in {selected_module}")
+        # Detect and process deletions
+        if 'module_id' in edited_df.columns:
+            current_module_ids = set(edited_df['module_id'].dropna().tolist())
+            ids_to_delete = original_module_ids - current_module_ids
+            
+            # Process deletions without forcing a rerun
+            for module_id_to_delete in ids_to_delete:
+                delete_module_from_db(user_email, module_id_to_delete)
+            # The data editor will update automatically due to Streamlit's reactivity
+            
+            # Button to save other changes (edits, new rows if editor adds them)
+            if st.button("Guardar Cambios en Módulos Editados/Agregados"):
+                st.warning("La funcionalidad de guardar ediciones o nuevas filas desde este editor aún no está implementada.")
+                # Placeholder for update/add logic:
+                # Compare edited_df with modules_df_from_db row by row (e.g., by module_id)
+                # For new rows (if editor adds them with blank module_id), they'd need to be saved with save_new_module_to_db
+
 else:
-    if modules_df.empty:
-        st.warning("No modules available. Please add modules first.")
-    if students_df is None or students_df.empty:
-        st.warning("No students available. Please add students first.")
+    st.error("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")
+
+# --- MODULE ENROLLMENT SECTION (Placeholder) ---
+# st.divider()
+# st.header("Inscripción a Módulos")
+# Add enrollment logic here if needed
