@@ -7,9 +7,17 @@ import io
 from utils import save_attendance, load_students, load_attendance
 from config import setup_page
 
-# --- Session State Initialization ---
+# --- Login Check ---
+if not st.session_state.get('logged_in', False):
+    st.error("Debe iniciar sesión para acceder a esta página.")
+    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.stop()
+# --- End Login Check ---
+
+# Setup page title (now that config is done and user is logged in)
 setup_page("Gestión de Asistencia")
 
+# --- Session State Initialization ---
 if 'uploader_key_suffix' not in st.session_state:
     st.session_state.uploader_key_suffix = "initial_attendance"
 

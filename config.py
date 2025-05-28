@@ -21,18 +21,9 @@ db = firebase.database()
 def check_auth():
     """Check if user is logged in, redirect to login if not"""
     if 'logged_in' not in st.session_state or not st.session_state.logged_in:
-        st.switch_page("index.py")
+        st.switch_page("Home.py")
 
 def setup_page(title):
-    """Common page setup with title and auth check"""
+    """Common page setup with title."""
     st.set_page_config(page_title=title, layout="wide")
-    check_auth()
     st.title(title)
-    
-    # Show logout button in sidebar
-    with st.sidebar:
-        st.title(f"Welcome, {st.session_state.email}")
-        if st.button("Logout"):
-            st.session_state.logged_in = False
-            st.session_state.email = None
-            st.rerun()

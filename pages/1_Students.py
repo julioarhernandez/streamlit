@@ -3,11 +3,18 @@ import pandas as pd
 from config import setup_page
 from utils import save_students, load_students
 
-# Setup page
+# --- Login Check ---
+if not st.session_state.get('logged_in', False):
+    st.error("Debe iniciar sesión para acceder a esta página.")
+    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.stop() 
+# --- End Login Check ---
+
+# Setup page title (now that config is done and user is logged in)
 setup_page("Gestión de Estudiantes")
 
 # Main UI
-st.header("Gestionar Estudiantes")
+# st.header("Gestionar Estudiantes") # st.title is usually sufficient for the main page title
 
 # File upload section
 uploaded_file = st.file_uploader("Subir Archivo de Estudiantes (CSV o Excel)", 

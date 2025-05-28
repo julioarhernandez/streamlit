@@ -5,6 +5,16 @@ import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
 
+# --- Login Check ---
+if not st.session_state.get('logged_in', False):
+    st.error("Debe iniciar sesión para acceder a esta página.")
+    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.stop()
+# --- End Login Check ---
+
+# Setup page
+setup_page("Reportes de Asistencia") # Reverted call
+
 # Manual Spanish day name mapping to avoid locale/encoding issues
 SPANISH_DAY_NAMES = {
     "Monday": "Lunes",
@@ -16,11 +26,7 @@ SPANISH_DAY_NAMES = {
     "Sunday": "Domingo"
 }
 
-# Setup page
-setup_page("Reportes de Asistencia") # Translated
-
 # Main UI
-st.header("Ver Registros de Asistencia") # Translated
 
 # Date selectors for range
 today = datetime.date.today()

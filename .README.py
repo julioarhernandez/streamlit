@@ -1,2 +1,2 @@
 pip install -r requirements.txt
-python -m streamlit run index.py
+python -m streamlit run Home.py
