@@ -31,19 +31,43 @@ if 'processed_files_this_session' not in st.session_state:
     st.session_state.processed_files_this_session = set()
 
 # --- Helper Functions (extract_date_from_filename, parse_attendance_report) ---
+# def extract_date_from_filename(filename: str) -> datetime.date | None:
+#     match_keyword = re.search(r'Informe de Asistencia ', filename, re.IGNORECASE)
+#     if match_keyword:
+#         date_str_candidate = filename[match_keyword.end():]
+#         match_date = re.match(r'(\d{1,2})-(\d{1,2})-(\d{2})', date_str_candidate)
+#         if match_date:
+#             month, day, year_short = map(int, match_date.groups())
+#             year = 2000 + year_short
+#             try:
+#                 return datetime.date(year, month, day)
+#             except ValueError:
+#                 return None
+#     return None
 def extract_date_from_filename(filename: str) -> datetime.date | None:
-    match_keyword = re.search(r'Informe de Asistencia ', filename, re.IGNORECASE)
-    if match_keyword:
-        date_str_candidate = filename[match_keyword.end():]
-        match_date = re.match(r'(\d{1,2})-(\d{1,2})-(\d{2})', date_str_candidate)
-        if match_date:
-            month, day, year_short = map(int, match_date.groups())
-            year = 2000 + year_short
-            try:
-                return datetime.date(year, month, day)
-            except ValueError:
-                return None
+    # Define patterns to match
+    patterns = [
+        r'(Informe de Asistencia )',
+        r'(Attendance report )'
+    ]
+
+    for pattern in patterns:
+        match_keyword = re.search(pattern, filename, re.IGNORECASE)
+        if match_keyword:
+            # Get the part after the matched keyword
+            date_str_candidate = filename[match_keyword.end():]
+
+            # Look for date pattern at the start
+            match_date = re.match(r'(\d{1,2})-(\d{1,2})-(\d{2})', date_str_candidate)
+            if match_date:
+                month, day, year_short = map(int, match_date.groups())
+                year = 2000 + year_short
+                try:
+                    return datetime.date(year, month, day)
+                except ValueError:
+                    return None
     return None
+
 
 def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> list:
     lines = file_content_str.splitlines()
@@ -103,14 +127,13 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
 
 # --- Main UI --- 
 st.header("Subir Archivos de Informe de Asistencia")
-st.caption("Suba uno o más archivos CSV de informe de asistencia. Las fechas se detectarán de los nombres de archivo.")
 
 uploaded_reports = st.file_uploader(
-    "Subir informe(s) CSV de asistencia a la reunión",
+    "Las fechas se detectarán de los nombres de archivo.",
     type=['csv'],
     accept_multiple_files=True,
     key=f"report_uploader_daily_{st.session_state.uploader_key_suffix}",
-    help="Suba archivos CSV. La fecha se detecta del nombre de archivo (p.ej., '...Informe de Asistencia MM-DD-YY.csv')"
+    help="Suba archivos CSV. La fecha se detecta del nombre de archivo (p.ej., '...Attendance Report MM-DD-YY.csv')"
 )
 
 if uploaded_reports:
