@@ -59,8 +59,26 @@ def load_attendance(date: datetime.date) -> dict:
     try:
         user_email = st.session_state.email.replace('.', ',')
         date_str = date.strftime('%Y-%m-%d')
-        data = db.child("attendance").child(user_email).child(date_str).get().val()
-        return data or {}
+        raw_data = db.child("attendance").child(user_email).child(date_str).get().val()
+        
+        if isinstance(raw_data, list):
+            # Convert list of records to a dictionary keyed by student name
+            processed_data = {}
+            for record in raw_data:
+                if isinstance(record, dict) and 'name' in record:
+                    # Ensure we don't overwrite if names aren't unique, though they should be per day
+                    processed_data[record['name']] = record 
+                # else: st.warning(f"Skipping invalid record in list for {date_str}: {record}") # Optional: log bad records
+            return processed_data
+        elif isinstance(raw_data, dict):
+            # If it's already a dict (e.g., older data or different save format), return as is
+            return raw_data
+        else:
+            # No data or unexpected type
+            return {}
+            
     except Exception as e:
         st.error(f"Error loading attendance for {date_str}: {str(e)}")
         return {}
+
+# --- Module Management Functions ---
