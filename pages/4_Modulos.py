@@ -148,9 +148,10 @@ with st.container():
     
     with col1:
         ciclo1_inicio = st.date_input(
-            "Fecha de Inicio", 
+            "Fecha de Inicio (MM/DD/YYYY)", 
             key="_ciclo1_inicio",
-            value=st.session_state.ciclo1_inicio
+            value=st.session_state.ciclo1_inicio,
+            format="MM/DD/YYYY"
         )
         
         # Update session state if date changes
@@ -172,9 +173,10 @@ with st.container():
         st.session_state.prev_ciclo1_fin = ciclo1_fin
         
         st.date_input(
-            "Fecha de Fin",
+            "Fecha de Fin (MM/DD/YYYY)",
             value=ciclo1_fin if ciclo1_fin else datetime.date.today(),
             key="ciclo1_fin_display",
+            format="MM/DD/YYYY",
             disabled=True
         )
     
@@ -184,9 +186,10 @@ with st.container():
     
     with col3:
         ciclo2_inicio = st.date_input(
-            "Fecha de Inicio",
+            "Fecha de Inicio (MM/DD/YYYY)",
             key="_ciclo2_inicio",
-            value=st.session_state.ciclo2_inicio
+            value=st.session_state.ciclo2_inicio,
+            format="MM/DD/YYYY"
         )
         
         # Update session state if date changes
@@ -208,9 +211,10 @@ with st.container():
         st.session_state.prev_ciclo2_fin = ciclo2_fin
         
         st.date_input(
-            "Fecha de Fin",
+            "Fecha de Fin (MM/DD/YYYY)",
             value=ciclo2_fin if ciclo2_fin else datetime.date.today(),
             key="ciclo2_fin_display",
+            format="MM/DD/YYYY",
             disabled=True
         )
     
@@ -267,12 +271,19 @@ if user_email:
             original_module_ids = set()
             st.warning("La columna 'module_id' no se encontró. La detección de eliminaciones no funcionará correctamente.")
 
+        # Configure date display format
+        date_format = "MM/DD/YYYY"
+        
         editable_cols_config = {
             "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
             "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
             "description": st.column_config.TextColumn("Descripción"),
             "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, help="Número de orden del módulo"),
-            "duration_weeks": st.column_config.NumberColumn("Duración (Semanas)", format="%d", min_value=1)
+            "duration_weeks": st.column_config.NumberColumn("Duración (Semanas)", format="%d", min_value=1),
+            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, disabled=True),
+            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, disabled=True),
+            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, disabled=True),
+            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, disabled=True)
             # 'created_at' could also be displayed as disabled if desired
         }
         
@@ -280,7 +291,16 @@ if user_email:
         final_column_config = {}
 
         # Define the order of columns for display (module_id will be hidden but kept in data)
-        display_columns = ['name', 'description', 'duration_weeks', 'credits']  # Moved credits to the end as 'Orden'
+        display_columns = [
+            'name', 
+            'description', 
+            'duration_weeks', 
+            'credits',
+            'ciclo1_inicio',
+            'ciclo1_fin',
+            'ciclo2_inicio',
+            'ciclo2_fin'
+        ]  # Include all date columns
         
         # Configure which columns are shown and how
         for col_key in display_columns:
