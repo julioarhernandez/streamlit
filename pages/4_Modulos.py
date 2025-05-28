@@ -18,27 +18,42 @@ def save_new_module_to_db(user_email, module_data):
         return False
 
 # Function to delete a module
+# def delete_module_from_db(user_email, module_id):
+#     st.write(f"Debug: delete_module_from_db called with user_email: {user_email}, module_id: {module_id}")
+#     if not user_email or not module_id:
+#         st.error("Error: Datos de usuario o ID de módulo no válidos.")
+#         return False
+        
+#     try:
+#         user_email_sanitized = user_email.replace('.', ',')
+#         # Get module name before deleting for better feedback
+#         module_ref = db.child("modules").child(user_email_sanitized).child(module_id).get()
+#         module_name = module_ref.val().get('name', '') if module_ref.val() else 'Desconocido'
+#         st.write(f"Debug: module_name: {module_name}")
+#         # Delete the module
+#         db.child("modules").child(user_email_sanitized).child(module_id).remove()
+        
+#         # Show success message
+#         st.toast(f"Módulo eliminado: {module_name} (ID: {module_id[-4:]})")
+#         return True
+#     except Exception as e:
+#         st.error(f"Error al eliminar el módulo: {str(e)}")
+#         return False
+
 def delete_module_from_db(user_email, module_id):
-    st.write(f"Debug: delete_module_from_db called with user_email: {user_email}, module_id: {module_id}")
+    """Delete a module from Firebase database"""
     if not user_email or not module_id:
-        st.error("Error: Datos de usuario o ID de módulo no válidos.")
         return False
         
     try:
         user_email_sanitized = user_email.replace('.', ',')
-        # Get module name before deleting for better feedback
-        module_ref = db.child("modules").child(user_email_sanitized).child(module_id).get()
-        module_name = module_ref.val().get('name', '') if module_ref.val() else 'Desconocido'
-        st.write(f"Debug: module_name: {module_name}")
-        # Delete the module
-        db.child("modules").child(user_email_sanitized).child(module_id).remove()
-        
-        # Show success message
-        st.toast(f"Módulo eliminado: {module_name} (ID: {module_id[-4:]})")
+        module_ref = db.child("modules").child(user_email_sanitized).child(module_id)
+        module_ref.remove()
         return True
-    except Exception as e:
-        st.error(f"Error al eliminar el módulo: {str(e)}")
+            
+    except Exception:
         return False
+        
 
 # Function to load all modules for the current user from Firebase.
 def load_modules(user_email_from_session):
@@ -318,56 +333,28 @@ if user_email:
             st.stop()
             
         # Create the data editor with row deletion enabled
-        st.write("Debug: modules_df_from_db before editor:", modules_df_from_db['module_id'].tolist() if 'module_id' in modules_df_from_db else "No module_id col")
-
         edited_df = st.data_editor(
-            modules_df_from_db[['module_id'] + display_cols_in_editor].copy(),  # Try with .copy()
+            modules_df_from_db[['module_id'] + display_cols_in_editor].copy(),
             column_config={
                 **final_column_config,
                 "module_id": None  # This hides the column from display
             },
             hide_index=True,
             num_rows="dynamic",
-            key="modules_editor_main", # This key is important
+            key="modules_editor_main",
             use_container_width=True,
             disabled=("module_id",), 
             on_change=None 
         )
         
-        # --- Start of new section: Detect UI Deletions and Trigger Confirmation ---
-        # This logic should be placed immediately after the st.data_editor call.
-        # It replaces any previous logic that tried to handle deletions immediately or with a different UI.
-
-        st.write("--- Debug Deletion Detection ---")
-        st.write(f"Debug: original_module_ids: {original_module_ids}") 
-        st.write(f"Debug: st.session_state.ids_to_delete (before detection): {st.session_state.ids_to_delete}")
-        st.write(f"Debug: 'module_id' in edited_df.columns: {'module_id' in edited_df.columns}")
-        if 'module_id' in edited_df.columns:
-            st.write(f"Debug: edited_df['module_id'].dropna().tolist(): {edited_df['module_id'].dropna().tolist()}")
-        st.write("--- End Debug Deletion Detection ---")
-        
         # Detect if rows were removed in the data_editor UI and no confirmation is currently active
         if 'module_id' in edited_df.columns and not st.session_state.ids_to_delete:
-            # 'original_module_ids' should be defined earlier, containing IDs from the DB load
             current_module_ids_in_editor = set(edited_df['module_id'].dropna().tolist())
             ids_to_delete_detected = original_module_ids - current_module_ids_in_editor
 
-            st.write("--- Debug Inside Detection Logic ---")
-            st.write(f"Debug: current_module_ids_in_editor: {current_module_ids_in_editor}")
-            st.write(f"Debug: ids_to_delete_detected: {ids_to_delete_detected}")
-            st.write("--- End Debug Inside Detection Logic ---")
-
             if ids_to_delete_detected:
-                st.write("Debug: Detected IDs to delete. Setting session_state and calling st.rerun().") # ADD THIS LINE
                 st.session_state.ids_to_delete = ids_to_delete_detected
                 st.rerun() # Rerun to display the confirmation dialog below
-
-        # Display Confirmation Dialog for pending deletions
-        # This block will only be active if st.session_state.ids_to_delete is populated
-
-        st.write("--- Debug Confirmation Dialog ---") # ADD THIS LINE
-        st.write(f"Debug: st.session_state.ids_to_delete (before showing dialog): {st.session_state.ids_to_delete}") # ADD THIS LINE
-        st.write("--- End Debug Confirmation Dialog ---") # ADD THIS LINE
         
 
         if st.session_state.ids_to_delete:
@@ -377,11 +364,9 @@ if user_email:
             col_confirm_del, col_cancel_del, _ = st.columns([1,1,3]) # Added a third column for spacing
 
             with col_confirm_del:
-                if st.button("Sí, eliminar módulo(s)", type="primary", key="confirm_final_delete_button"):
-                    st.write("Debug: 'Sí, eliminar módulo(s)' button clicked.") # DEBUG LINE
-                    
-                    # It's safer to operate on a copy if iterating and potentially modifying session state,
-                    # though here we clear it at the end.
+                confirm_button_pressed = st.button("Sí, eliminar módulo(s)", type="primary", key="confirm_final_delete_button")
+
+                if confirm_button_pressed:
                     ids_to_process_deletion = list(st.session_state.ids_to_delete) 
                     st.write(f"Debug: Attempting to delete IDs: {ids_to_process_deletion}") # DEBUG LINE
                     
@@ -414,15 +399,16 @@ if user_email:
                     # st.write("Debug: This line should NOT be reached if st.rerun() works immediately.") # DEBUG LINE
 
             with col_cancel_del:
-                if st.button("Cancelar eliminación", key="cancel_final_delete_button"):
+                cancel_button_pressed = st.button("Cancelar eliminación", key="cancel_final_delete_button")
+                st.write(f"Debug: cancel_button_pressed = {cancel_button_pressed}") # DEBUG LINE
+
+                if cancel_button_pressed:
+                    st.write("Debug: 'Cancelar eliminación' button clicked. (Inside if cancel_button_pressed)") # DEBUG LINE
                     st.session_state.ids_to_delete = set() # Clear pending deletions
                     st.info("Eliminación cancelada. Los módulos no han sido eliminados de la base de datos.")
-                    # Rerun to refresh the data_editor; it should revert to showing the rows
-                    # as Streamlit's data_editor state might reset or you might need to reload data.
-                    st.rerun() 
-            
-            # Stop further processing of the page, including the "Guardar Cambios" button,
-            # until the deletion is confirmed or cancelled.
+                    st.rerun() # Rerun to refresh
+                    # Stop further processing of the page, including the "Guardar Cambios" button,
+                    # until the deletion is confirmed or cancelled.
             st.stop()
             # --- End of new section ---
             
