@@ -187,10 +187,21 @@ if uploaded_reports:
         st.session_state.processed_files_this_session.add(report_file.name)
 
     if files_processed_summary:
-        st.markdown("**Archivos Procesados Exitosamente:**")
+        st.markdown("### ✅ Archivos Procesados Exitosamente")
+
         for date_obj, filenames in files_processed_summary.items():
             attendee_count = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
-            st.write(f"- **{date_obj.strftime('%Y-%m-%d')}**: {len(filenames)} archivo(s) procesado(s), contribuyendo a {attendee_count} asistentes únicos para esta fecha.")
+            
+            with st.expander(f"{date_obj.strftime('%Y-%m-%d')} — {len(filenames)} archivo(s), {attendee_count} asistentes únicos"):
+                col1, col2 = st.columns([1, 3])
+                col1.markdown("**Archivos:**")
+                for filename in filenames:
+                    col2.write(f"📄 {filename}")
+    # if files_processed_summary:
+    #     st.markdown("**Archivos Procesados Exitosamente:**")
+    #     for date_obj, filenames in files_processed_summary.items():
+    #         attendee_count = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
+    #         st.write(f"- **{date_obj.strftime('%Y-%m-%d')}**: {len(filenames)} archivo(s) procesado(s), contribuyendo a {attendee_count} asistentes únicos para esta fecha.")
     
     if files_skipped_summary:
         st.markdown("**Archivos Omitidos:**")
