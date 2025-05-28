@@ -306,14 +306,14 @@ if user_email:
         editable_cols_config = {
             "firebase_key": st.column_config.TextColumn("Firebase Key", disabled=True, help="Clave única de Firebase para este módulo"),
             "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
-            "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
-            "description": st.column_config.TextColumn("Descripción"),
-            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, help="Número de orden del módulo"),
-            "duration_weeks": st.column_config.NumberColumn("Duración (Semanas)", format="%d", min_value=1),
-            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, disabled=True),
-            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, disabled=True),
-            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, disabled=True),
-            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, disabled=True)
+            "name": st.column_config.TextColumn("Nombre del Módulo", required=True, width="medium"),
+            "description": st.column_config.TextColumn("Descripción", width="small"),
+            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small", help="Número de orden del módulo"),
+            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
+            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, disabled=True, width="small"),
+            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, disabled=True, width="small"),
+            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, disabled=True, width="small"),
+            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, disabled=True, width="small")
             # 'created_at' could also be displayed as disabled if desired
         }
         
