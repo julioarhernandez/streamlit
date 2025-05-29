@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 from config import setup_page, db
-from utils import save_students, load_students
+from utils import save_students, load_students, get_available_modules
+
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -171,61 +172,15 @@ st.divider()
 # --- Select Module ---
 st.subheader("Seleccionar Módulo")
 
-# Load modules from database
+# Load available modules using the utility function
 try:
     user_email = st.session_state.get('email', '').replace('.', ',')
-    modules_ref = db.child("modules").child(user_email).get().val()
+    module_options = get_available_modules(user_email)
     
-    module_options = []
-    if modules_ref:
-        for module_id, module_data in modules_ref.items():
-            if module_data:
-                module_name = module_data.get('name', 'Módulo sin nombre')
-                # Add option for ciclo 1 if dates exist
-                if 'ciclo1_inicio' in module_data and module_data['ciclo1_inicio']:
-                    start_date = module_data['ciclo1_inicio']
-                    if isinstance(start_date, str):
-                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%m/%d/%Y')
-                    module_options.append({
-                        'label': f"{module_name} (Ciclo 1 - Inicia: {start_date})",
-                        'module_id': module_id,
-                        'ciclo': 1,
-                        'start_date': module_data['ciclo1_inicio']
-                    })
-                # Add option for ciclo 2 if dates exist
-                if 'ciclo2_inicio' in module_data and module_data['ciclo2_inicio']:
-                    start_date = module_data['ciclo2_inicio']
-                    if isinstance(start_date, str):
-                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%m/%d/%Y')
-                    module_options.append({
-                        'label': f"{module_name} (Ciclo 2 - Inicia: {start_date})",
-                        'module_id': module_id,
-                        'ciclo': 2,
-                        'start_date': module_data['ciclo2_inicio']
-                    })
-
-    #
-    # Start date sorting
-    #
-    
-    today = datetime.datetime.today()
-    cutoff_date = today - datetime.timedelta(days=15)
-
-    # Filter out old past dates
-    filtered_module_options = [
-        module for module in module_options
-        if datetime.datetime.fromisoformat(module['start_date']) >= cutoff_date
-    ]
-
-    # Sort by closeness to today
-    filtered_module_options.sort(
-        key=lambda x: abs((datetime.datetime.fromisoformat(x['start_date']) - today).days)
-    )
-    
-    if filtered_module_options:
+    if module_options:
         selected_module = st.selectbox(
             "Seleccione un módulo para agregar a los nuevos estudiantes:",
-            options=filtered_module_options,
+            options=module_options,
             format_func=lambda x: x['label'],
             index=0
         )

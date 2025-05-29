@@ -360,3 +360,76 @@ def date_format(date_value, from_format, to_format='%m/%d/%Y'):
         
     except (ValueError, TypeError, AttributeError):
         return 'No especificada'
+
+
+def get_available_modules(user_email: str) -> list:
+    """
+    Retrieve and process available modules for a user.
+    
+    Args:
+        user_email: The user's email (with . replaced with ,)
+        
+    Returns:
+        list: List of module options with their details, sorted by proximity to current date
+    """
+    try:
+        # Create a fresh Firebase reference for this operation
+        modules_ref = db.child("modules").child(user_email).get()
+        if not modules_ref.val():
+            return []
+            
+        module_options = []
+        today = datetime.datetime.today()
+        cutoff_date = today - datetime.timedelta(days=15)
+        
+        # Process each module
+        for module_id, module_data in modules_ref.val().items():
+            if not module_data:
+                continue
+                
+            module_name = module_data.get('name', 'Módulo sin nombre')
+            
+            # Process ciclo 1 if it exists
+            if 'ciclo1_inicio' in module_data and module_data['ciclo1_inicio']:
+                start_date = module_data['ciclo1_inicio']
+                if isinstance(start_date, str):
+                    try:
+                        start_date_dt = datetime.datetime.fromisoformat(start_date)
+                        if start_date_dt >= cutoff_date:
+                            module_options.append({
+                                'label': f"{module_name} (Ciclo 1 - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
+                                'module_id': module_id,
+                                'ciclo': 1,
+                                'start_date': module_data['ciclo1_inicio'],
+                                'module_name': module_name
+                            })
+                    except (ValueError, TypeError):
+                        continue
+            
+            # Process ciclo 2 if it exists
+            if 'ciclo2_inicio' in module_data and module_data['ciclo2_inicio']:
+                start_date = module_data['ciclo2_inicio']
+                if isinstance(start_date, str):
+                    try:
+                        start_date_dt = datetime.datetime.fromisoformat(start_date)
+                        if start_date_dt >= cutoff_date:
+                            module_options.append({
+                                'label': f"{module_name} (Ciclo 2 - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
+                                'module_id': module_id,
+                                'ciclo': 2,
+                                'start_date': module_data['ciclo2_inicio'],
+                                'module_name': module_name
+                            })
+                    except (ValueError, TypeError):
+                        continue
+        
+        # Sort by proximity to today's date
+        module_options.sort(
+            key=lambda x: abs((datetime.datetime.fromisoformat(x['start_date']) - today).days)
+        )
+        
+        return module_options
+        
+    except Exception as e:
+        st.error(f"Error al cargar los módulos: {str(e)}")
+        return []
