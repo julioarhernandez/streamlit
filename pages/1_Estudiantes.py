@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from config import setup_page
+import datetime
+from config import setup_page, db
 from utils import save_students, load_students
 
 # --- Login Check ---
@@ -70,7 +71,7 @@ if uploaded_file is not None:
         st.error(f"Error procesando el archivo: {str(e)}")
         st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
 
-st.divider()
+# st.divider()
 
 # --- Add Multiple Students via Text Area ---
 if 'text_area_input' in st.session_state and st.session_state.text_area_input and submit_add_students_text:
@@ -129,6 +130,66 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     st.rerun()
                 else:
                     st.error("Error al agregar estudiantes desde el área de texto.")
+
+st.divider()
+
+# --- Select Module ---
+st.subheader("Seleccionar Módulo")
+
+# Load modules from database
+try:
+    user_email = st.session_state.get('email', '').replace('.', ',')
+    modules_ref = db.child("modules").child(user_email).get().val()
+    
+    module_options = []
+    if modules_ref:
+        for module_id, module_data in modules_ref.items():
+            if module_data:
+                module_name = module_data.get('name', 'Módulo sin nombre')
+                # Add option for ciclo 1 if dates exist
+                if 'ciclo1_inicio' in module_data and module_data['ciclo1_inicio']:
+                    start_date = module_data['ciclo1_inicio']
+                    if isinstance(start_date, str):
+                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%m/%d/%Y')
+                    module_options.append({
+                        'label': f"{module_name} (Ciclo 1 - Inicia: {start_date})",
+                        'module_id': module_id,
+                        'ciclo': 1,
+                        'start_date': module_data['ciclo1_inicio']
+                    })
+                # Add option for ciclo 2 if dates exist
+                if 'ciclo2_inicio' in module_data and module_data['ciclo2_inicio']:
+                    start_date = module_data['ciclo2_inicio']
+                    if isinstance(start_date, str):
+                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%m/%d/%Y')
+                    module_options.append({
+                        'label': f"{module_name} (Ciclo 2 - Inicia: {start_date})",
+                        'module_id': module_id,
+                        'ciclo': 2,
+                        'start_date': module_data['ciclo2_inicio']
+                    })
+    
+    # Sort modules by start date (most recent first)
+    module_options.sort(key=lambda x: x.get('start_date', ''), reverse=True)
+    
+    if module_options:
+        selected_module = st.selectbox(
+            "Seleccione un módulo para agregar a los nuevos estudiantes:",
+            options=module_options,
+            format_func=lambda x: x['label'],
+            index=0
+        )
+        
+        # Store selected module in session state for later use
+        if selected_module:
+            st.session_state.selected_module = selected_module
+            st.session_state.selected_module_id = selected_module['module_id']
+            st.session_state.selected_ciclo = selected_module['ciclo']
+    else:
+        st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
+        
+except Exception as e:
+    st.error(f"Error al cargar los módulos: {str(e)}")
 
 st.divider()
 
