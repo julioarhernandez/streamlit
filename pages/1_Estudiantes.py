@@ -22,9 +22,25 @@ if df_loaded is not None and not df_loaded.empty:
 # Main UI
 # st.header("Gestionar Estudiantes") # st.title is usually sufficient for the main page title
 
-# File upload section
-uploaded_file = st.file_uploader("Subir Archivo de Estudiantes (CSV o Excel)", 
-                               type=['csv'])
+# Create tabs for different input methods
+tab1, tab2 = st.tabs(["📤 Subir Archivo", "✏️ Ingresar Texto"])
+
+with tab1:
+    st.subheader("Cargar desde Archivo")
+    uploaded_file = st.file_uploader(
+        "Seleccione un archivo CSV o Excel con los estudiantes",
+        type=['csv', 'xlsx', 'xls'],
+        key="file_uploader"
+    )
+
+with tab2:
+    st.subheader("Ingresar Nombres Manualmente")
+    students_text_area = st.text_area(
+        "Ingrese un nombre de estudiante por línea",
+        height=150,
+        key="text_area_input"
+    )
+    submit_add_students_text = st.button("Agregar Estudiantes desde Texto")
 
 if uploaded_file is not None:
     try:
@@ -57,13 +73,7 @@ if uploaded_file is not None:
 st.divider()
 
 # --- Add Multiple Students via Text Area ---
-st.subheader("Agregar Múltiples Estudiantes mediante Área de Texto")
-st.caption("Ingrese un nombre de estudiante por línea. Los duplicados y nombres existentes serán omitidos.")
-with st.form(key="add_students_textarea_form", clear_on_submit=True):
-    students_text_area = st.text_area("Nombres de Estudiantes (uno por línea)", height=150)
-    submit_add_students_text = st.form_submit_button("Agregar Estudiantes desde Texto")
-
-if submit_add_students_text:
+if 'text_area_input' in st.session_state and st.session_state.text_area_input and submit_add_students_text:
     if not students_text_area.strip():
         st.warning("El área de texto está vacía. Por favor, ingrese nombres de estudiantes.")
     else:
