@@ -5,7 +5,7 @@ import datetime
 import re
 import io
 import time
-from utils import save_attendance, load_students, load_attendance
+from utils import save_attendance, load_students, load_attendance, delete_attendance_dates, get_attendance_dates
 from config import setup_page
 
 # --- Login Check ---
@@ -126,8 +126,67 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
         return []
 
 # --- Main UI --- 
-st.header("Subir Archivos de Informe de Asistencia")
+st.header("Archivos de Asistencia guardados")
 
+with st.expander("Ver lista de fechas"):
+    try:
+        # Get all attendance dates
+        all_attendance = get_attendance_dates()
+        
+        if all_attendance:
+            # Create a DataFrame with the dates and a delete column
+            dates_df = pd.DataFrame({
+                'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%Y-%m-%d') for d in all_attendance],
+                'Eliminar': [False] * len(all_attendance)
+            })
+            
+            # Display the data editor
+            with st.form("attendance_dates_form"):
+                st.write("Seleccione las asistencias a eliminar:")
+                edited_df = st.data_editor(
+                    dates_df,
+                    column_config={
+                        "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                        "Eliminar": st.column_config.CheckboxColumn("Seleccionar para eliminar")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+                
+                # Add buttons for actions
+                col1, col2, _ = st.columns([3, 3,4])
+                with col1:
+                    delete_selected = st.form_submit_button("Eliminar seleccionados", type="secondary")
+                with col2:
+                    delete_all = st.form_submit_button("Eliminar todo", type="primary")
+                
+                if delete_selected:
+                    # Get dates to delete
+                    to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
+                    if to_delete:
+                        if delete_attendance_dates(to_delete):
+                            st.success(f"Se eliminaron {len(to_delete)} asistencias correctamente.")
+                            st.rerun()
+                        else:
+                            st.error("Error al eliminar las asistencias seleccionadas.")
+                    else:
+                        st.warning("Por favor seleccione al menos una asistencia para eliminar.")
+                        
+                elif delete_all:
+                    if st.toggle("¿Está seguro que desea eliminar TODAS las asistencias?", key="confirm_delete_all"):
+                        if delete_attendance_dates(all_attendance):
+                            st.success("Todas las asistencias han sido eliminadas correctamente.")
+                            st.rerun()
+                        else:
+                            st.error("Error al eliminar las asistencias.")
+        else:
+            st.info("No hay asistencias registradas.")
+        
+    except Exception as e:
+        st.error(f"Error al cargar las asistencias: {str(e)}")
+
+# --- Main UI --- 
+st.header("Subir Archivos de Informe de Asistencia")
 uploaded_reports = st.file_uploader(
     "Las fechas se detectarán de los nombres de archivo.",
     type=['csv'],

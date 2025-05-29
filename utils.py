@@ -142,6 +142,9 @@ def get_attendance_dates():
     try:
         user_email = st.session_state.email.replace('.', ',')
         docs = db.child("attendance").child(user_email).get().val()
+        if not docs:
+            return []
+            
         # Extract dates and filter out any None or invalid dates
         dates = []
         for doc in docs:
@@ -150,12 +153,41 @@ def get_attendance_dates():
                 datetime.datetime.strptime(doc, '%Y-%m-%d')
                 dates.append(doc)
             except (ValueError, TypeError):
-                    continue
+                continue
         # Sort dates chronologically
         return sorted(dates)
     except Exception as e:
         st.error(f"Error loading attendance dates: {str(e)}")
         return []
+
+def delete_attendance_dates(dates_to_delete):
+    """
+    Delete attendance records for the specified dates
+    
+    Args:
+        dates_to_delete (list): List of date strings in 'YYYY-MM-DD' format
+        
+    Returns:
+        bool: True if all deletions were successful, False otherwise
+    """
+    if not dates_to_delete:
+        return False
+        
+    try:
+        user_email = st.session_state.email.replace('.', ',')
+        attendance_ref = db.child("attendance").child(user_email)
+        
+        for date_str in dates_to_delete:
+            try:
+                attendance_ref.child(date_str).remove()
+            except Exception as e:
+                st.error(f"Error deleting attendance for {date_str}: {str(e)}")
+                continue
+                
+        return True
+    except Exception as e:
+        st.error(f"Error deleting attendance records: {str(e)}")
+        return False
 
 def format_date_for_display(date_value):
     """
