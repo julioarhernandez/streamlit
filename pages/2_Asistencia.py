@@ -161,16 +161,43 @@ with st.expander("Ver lista de fechas"):
                     delete_all = st.form_submit_button("Eliminar todo", type="primary")
                 
                 if delete_selected:
-                    # Get dates to delete
-                    to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
-                    if to_delete:
-                        if delete_attendance_dates(to_delete):
-                            st.success(f"Se eliminaron {len(to_delete)} asistencias correctamente.")
-                            st.rerun()
+                    print("\n--- Delete Selected Action Triggered ---") # Marker
+                    try:
+                        # It's good practice to ensure edited_df is what you expect
+                        if edited_df is not None:
+                            selected_rows = edited_df[edited_df['Eliminar']]
+                            print(f"DEBUG [2_Asistencia.py]: Number of rows marked for deletion in data_editor: {len(selected_rows)}")
+                            if not selected_rows.empty:
+                                to_delete = selected_rows['Fecha'].tolist()
+                                print(f"DEBUG [2_Asistencia.py]: Dates extracted for deletion: {to_delete} (type: {type(to_delete)})")
+                            else:
+                                to_delete = []
+                                print("DEBUG [2_Asistencia.py]: No rows were actually marked 'Eliminar' in the data editor.")
                         else:
-                            st.error("Error al eliminar las asistencias seleccionadas.")
-                    else:
-                        st.warning("Por favor seleccione al menos una asistencia para eliminar.")
+                            to_delete = []
+                            print("ERROR [2_Asistencia.py]: edited_df is None. Cannot determine dates to delete.")
+                            st.error("Error interno: No se pudieron obtener los datos editados.")
+
+                        if to_delete: # Only proceed if to_delete is a non-empty list
+                            print(f"INFO [2_Asistencia.py]: Calling delete_attendance_dates with to_delete = {to_delete}")
+                            if delete_attendance_dates(to_delete): # This is the crucial call
+                                st.success(f"Se eliminaron {len(to_delete)} asistencias correctamente.")
+                                st.session_state.uploader_key_suffix += 1
+                                # time.sleep(1) # Consider removing or reducing if not strictly needed
+                                st.rerun()
+                            else:
+                                st.error("Error al eliminar las asistencias seleccionadas (la función de borrado informó un fallo).")
+                        else:
+                            # This handles both cases: nothing selected, or edited_df was None
+                            if edited_df is not None: # Only show warning if data editor was available
+                                st.warning("Por favor seleccione al menos una asistencia para eliminar. (La lista 'to_delete' estaba vacía).")
+                            print("INFO [2_Asistencia.py]: No action taken as 'to_delete' list was empty.")
+                            
+                    except Exception as e_selected:
+                        print(f"CRITICAL ERROR in 'delete_selected' block [2_Asistencia.py]: {str(e_selected)}")
+                        st.error(f"Error crítico procesando la eliminación de seleccionados: {str(e_selected)}")
+
+
                         
                 elif delete_all:
                     if st.toggle("¿Está seguro que desea eliminar TODAS las asistencias?", key="confirm_delete_all"):
