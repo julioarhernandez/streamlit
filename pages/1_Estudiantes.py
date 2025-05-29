@@ -130,6 +130,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             # Get the selected module's start date if available
             start_date = None
             if 'selected_module' in st.session_state:
+                print(st.session_state.selected_module)
                 start_date = st.session_state.selected_module.get('start_date')
                 if isinstance(start_date, str):
                     try:
