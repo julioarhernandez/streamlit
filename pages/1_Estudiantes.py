@@ -58,8 +58,23 @@ if uploaded_file is not None:
         else:
             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
             
+            # Get the selected module's start date if available
+            start_date = None
+            if 'selected_module' in st.session_state:
+                start_date = st.session_state.selected_module.get('start_date')
+                if isinstance(start_date, str):
+                    try:
+                        # Convert to datetime and format consistently
+                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%Y-%m-%d')
+                        # Add start date to all uploaded students
+                        df_upload['fecha_inicio'] = start_date
+                    except (ValueError, TypeError):
+                        pass  # If date conversion fails, proceed without it
+            
             st.subheader("Vista Previa del Archivo Subido")
             st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
+            if start_date:
+                st.info(f"Se asignará la fecha de inicio del módulo: {start_date}")
             st.dataframe(df_upload)
             
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
