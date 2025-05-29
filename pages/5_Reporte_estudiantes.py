@@ -71,42 +71,45 @@ if df_loaded is not None and not df_loaded.empty:
                 print(f"Estudiante sin fecha de inicio: {student_name}")
                 return 'Sin fecha de inicio'
 
-            # Get the module the student started in using user_email
-            try:
-                start_date = pd.to_datetime(row['fecha_inicio']).date()
-                print(f"Buscando módulo para {student_name} en fecha: {start_date}")
-                
-                # Use the logged-in user's email for module lookup
-                student_module = get_module_on_date(user_email, start_date)
-                print(f"Módulo encontrado: {student_module}")
-
-                if not student_module or 'credits' not in student_module:
-                    print(f"Módulo no encontrado o sin créditos para {student_name}")
-                    return 'Módulo no encontrado'
-
-                # Get the student's starting module credit
-                student_credit = int(student_module['credits'])
+            # Get the start date and check if it's in the future
+            today = datetime.date.today()
+            start_date = pd.to_datetime(row['fecha_inicio']).date()
+            
+            # If start date is in the future, return max credit (hasn't started yet)
+            if start_date > today:
                 max_credit = get_highest_module_credit(user_email)
+                print(f"{student_name} comienza el {start_date} (futuro). Módulos restantes: {max_credit}")
+                return str(max_credit)
                 
-                print(f"Crédito del estudiante: {student_credit}, Máximo crédito: {max_credit}")
+            print(f"Buscando módulo para {student_name} en fecha: {start_date}")
+            
+            # Use the logged-in user's email for module lookup
+            student_module = get_module_on_date(user_email, start_date)
+            print(f"Módulo encontrado: {student_module}")
+
+            if not student_module or 'credits' not in student_module:
+                print(f"Módulo no encontrado o sin créditos para {student_name}")
+                return 'Módulo no encontrado'
+
+            # Get the student's starting module credit
+            student_credit = int(student_module['credits'])
+            max_credit = get_highest_module_credit(user_email)
+            
+            print(f"Crédito del estudiante: {student_credit}, Máximo crédito: {max_credit}")
+            
+            if max_credit <= 1:
+                return '0'  # Only one module exists
                 
-                if max_credit <= 1:
-                    return '0'  # Only one module exists
-                    
-                # Calculate remaining modules in circular sequence
-                if student_credit == 1:
-                    # If starting at module 1, they've completed all modules
-                    return '0'
-                else:
-                    # Calculate modules from current to max, then from 1 to current-1
-                    remaining = (max_credit - student_credit) + (student_credit - 1)
-                    # Since we want to include the current module in the count
-                    remaining = max_credit - 1 if remaining > max_credit else remaining
-                    return str(remaining)
-                    
-            except Exception as e:
-                print(f"Error procesando módulo para {student_name}: {str(e)}")
-                return f'Error: {str(e)}'
+            # Calculate remaining modules in circular sequence
+            if student_credit == 1:
+                # If starting at module 1, they've completed all modules
+                return '0'
+            else:
+                # Calculate modules from current to max, then from 1 to current-1
+                remaining = (max_credit - student_credit) + (student_credit - 1)
+                # Since we want to include the current module in the count
+                remaining = max_credit - 1 if remaining > max_credit else remaining
+                return str(remaining)
                 
         except Exception as e:
             print(f"Error inesperado para {student_name}: {str(e)}")
