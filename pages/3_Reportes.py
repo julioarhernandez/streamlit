@@ -104,7 +104,7 @@ else:
         
         # 3. Display Daily Summary Report
         if daily_summary_data:
-            summary_header = f"Resumen Diario de Asistencia (Excluyendo Fines de Semana): {start_date.strftime('%Y-%m-%d')} hasta {end_date.strftime('%Y-%m-%d')}" # Translated
+            summary_header = f"Resumen Diario de Asistencia: {start_date.strftime('%Y-%m-%d')} hasta {end_date.strftime('%Y-%m-%d')}" # Translated
             st.subheader(summary_header)
             df_summary_display = pd.DataFrame(daily_summary_data)
             # Reorder columns for better display, including Day Name
@@ -114,7 +114,7 @@ else:
             
             csv_export = df_summary_display.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="Descargar Resumen (Sin Fines de Semana) como CSV", # Translated
+                label="Descargar Resumen", # Translated
                 data=csv_export,
                 file_name=f"resumen_asistencia_diaria_sin_fines_semana_{start_date.strftime('%Y%m%d')}_a_{end_date.strftime('%Y%m%d')}.csv", # Translated filename
                 mime='text/csv',
@@ -125,11 +125,11 @@ else:
 
         # 4. Identify and Display Students Who Never Attended
         st.divider()
-        st.subheader("Estudiantes que Nunca Asistieron en el Rango Seleccionado (Todos los Días)") # Clarify this includes weekends if data existed
+        st.subheader("Estudiantes que Nunca Asistieron en las fechas Seleccionadas") # Clarify this includes weekends if data existed
         students_never_attended_list = sorted(list(master_student_list - students_present_in_range))
         
         if students_never_attended_list:
-            warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período (incluyendo fines de semana si hubo datos):" # Translated
+            warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período:" # Translated
             st.warning(warning_msg)
             
             # Get student data with start dates
@@ -169,18 +169,18 @@ else:
                 end_date_obj = datetime.datetime.strptime(end_date_str, '%m/%d/%Y')
                 
                 st.download_button(
-                    label="Descargar Lista de Estudiantes que Nunca Asistieron (Todos los Días) como CSV",
+                    label="Descargar Lista de Estudiantes que Nunca Asistieron",
                     data=csv_never_attended,
-                    file_name=f"nunca_asistieron_todos_los_dias_{start_date_obj.strftime('%Y%m%d')}_a_{end_date_obj.strftime('%Y%m%d')}.csv",
+                    file_name=f"nunca_asistieron_{start_date_obj.strftime('%Y%m%d')}_a_{end_date_obj.strftime('%Y%m%d')}.csv",
                     mime='text/csv; charset=utf-8-sig',
                     key='download_never_attended_csv_btn'
                 )
             except (ValueError, AttributeError) as e:
                 st.error(f"Error al formatear las fechas: {str(e)}")
                 st.download_button(
-                    label="Descargar Lista de Estudiantes que Nunca Asistieron (Todos los Días) como CSV",
+                    label="Descargar Lista de Estudiantes que Nunca Asistieron",
                     data=csv_never_attended,
-                    file_name="nunca_asistieron_todos_los_dias.csv",
+                    file_name="nunca_asistieron.csv",
                     mime='text/csv; charset=utf-8-sig',
                     key='download_never_attended_csv_btn_fallback'
                 )
