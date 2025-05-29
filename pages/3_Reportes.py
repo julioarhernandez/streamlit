@@ -33,8 +33,19 @@ today = datetime.date.today()
 # Default start date to the first day of the current month for a more common report view
 default_start_date = today.replace(day=1) 
 
-start_date = st.date_input("Fecha de Inicio", default_start_date, key="report_start_date") # Translated
-end_date = st.date_input("Fecha de Fin", today, key="report_end_date") # Translated
+# Format date inputs with YYYY-MM-DD format
+start_date = st.date_input(
+    "Fecha de Inicio", 
+    value=default_start_date,
+    key="report_start_date",
+    format="MM/DD/YYYY"
+)
+end_date = st.date_input(
+    "Fecha de Fin",
+    value=today,
+    key="report_end_date",
+    format="MM/DD/YYYY"
+)
 
 if start_date > end_date:
     st.error("Error: La fecha de inicio no puede ser posterior a la fecha de fin.") # Translated
