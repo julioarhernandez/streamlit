@@ -86,12 +86,17 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
         else:
             current_students_df, _ = load_students()
             if current_students_df is None:
-                current_students_df = pd.DataFrame(columns=['nombre'])
+                current_students_df = pd.DataFrame(columns=['nombre', 'fecha_inicio'])
             
+            # Ensure required columns exist with proper types
             if 'nombre' not in current_students_df.columns:
                 current_students_df['nombre'] = pd.Series(dtype='str')
             else:
                 current_students_df['nombre'] = current_students_df['nombre'].astype(str)
+                
+            # Ensure fecha_inicio column exists
+            if 'fecha_inicio' not in current_students_df.columns:
+                current_students_df['fecha_inicio'] = pd.NaT
 
             existing_normalized_names = set(current_students_df['nombre'].str.lower().str.strip())
             
@@ -107,10 +112,24 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     unique_potential_new_names.append(name)
                     seen_in_input.add(normalized_name)
             
+            # Get the selected module's start date if available
+            start_date = None
+            if 'selected_module' in st.session_state:
+                start_date = st.session_state.selected_module.get('start_date')
+                if isinstance(start_date, str):
+                    try:
+                        # Convert to datetime and format consistently
+                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%Y-%m-%d')
+                    except (ValueError, TypeError):
+                        start_date = None
+
             for name in unique_potential_new_names:
                 normalized_name = name.lower().strip()
                 if normalized_name not in existing_normalized_names:
-                    students_to_add_list.append({'nombre': name})
+                    student_data = {'nombre': name}
+                    if start_date:
+                        student_data['fecha_inicio'] = start_date
+                    students_to_add_list.append(student_data)
                     added_count += 1
                 else:
                     skipped_names.append(name)
