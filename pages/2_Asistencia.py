@@ -214,7 +214,7 @@ if not st.session_state.current_batch_data_by_date and not uploaded_reports:
 elif not st.session_state.current_batch_data_by_date and uploaded_reports:
     st.info("No se procesaron datos de asistencia de los archivos subidos. Verifique los archivos e inténtelo de nuevo.")
 
-if st.session_state.current_batch_data_by_date and not st.session_state.prepared_attendance_dfs:
+if st.session_state.current_batch_data_by_date:
     st.divider()
     st.subheader("Paso 2: Preparar Tablas de Asistencia")
     if st.button("Preparar Tablas de Asistencia para Edición"):
