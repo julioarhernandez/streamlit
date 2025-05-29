@@ -82,7 +82,7 @@ else:
                     for student_name, details in daily_attendance_dict.items():
                         # Ensure names are consistently handled (e.g. case, stripping) if needed for matching
                         # For now, assume names from load_attendance match those in master_student_list
-                        if details.get('status', '').lower() == 'present':
+                        if details.get('Presente', False):
                             present_today_count += 1
                             # For 'never attended', we still need to know if they were present on any day, including potential weekends if data existed
                             # However, the daily summary table will exclude weekends.

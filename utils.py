@@ -65,9 +65,9 @@ def load_attendance(date: datetime.date) -> dict:
             # Convert list of records to a dictionary keyed by student name
             processed_data = {}
             for record in raw_data:
-                if isinstance(record, dict) and 'name' in record:
+                if isinstance(record, dict) and 'Nombre' in record:
                     # Ensure we don't overwrite if names aren't unique, though they should be per day
-                    processed_data[record['name']] = record 
+                    processed_data[record['Nombre']] = record 
                 # else: st.warning(f"Skipping invalid record in list for {date_str}: {record}") # Optional: log bad records
             return processed_data
         elif isinstance(raw_data, dict):
