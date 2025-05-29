@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import format_date_for_display, create_filename_date_range, get_student_start_date, date_format
+from utils import format_date_for_display, create_filename_date_range, get_student_start_date, date_format, get_attendance_dates
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -35,18 +35,38 @@ today = datetime.date.today()
 default_start_date = today.replace(day=1) 
 
 # Format date inputs with MM/DD/YYYY format
-start_date = st.date_input(
-    "Fecha de Inicio", 
-    value=default_start_date,
-    key="report_start_date",
-    format="MM/DD/YYYY"
-)
-end_date = st.date_input(
-    "Fecha de Fin",
-    value=today,
-    key="report_end_date",
-    format="MM/DD/YYYY"
-)
+col1, col2 = st.columns(2)
+with col1:
+    start_date = st.date_input(
+        "Fecha de Inicio", 
+        value=default_start_date,
+        key="report_start_date",
+        format="MM/DD/YYYY"
+    )
+with col2:
+    end_date = st.date_input(
+        "Fecha de Fin",
+        value=today,
+        key="report_end_date",
+        format="MM/DD/YYYY"
+    )
+
+
+# Show available attendance dates
+st.caption("Asistencia(s) guardada(s):")
+try:
+    # Get all attendance dates
+    all_attendance = get_attendance_dates()
+    
+    if all_attendance:
+        # Display dates in a grid
+        all_badges = " ".join([f":gray-badge[:material/calendar_today: {datetime.datetime.strptime(date_str, '%Y-%m-%d').date().strftime('%m-%d-%Y')}] " for date_str in all_attendance])
+        st.markdown(all_badges)
+    else:
+        st.caption("No hay fechas con asistencia registrada")
+        
+except Exception as e:
+    st.error(f"Error al cargar fechas de asistencia: {str(e)}")
 
 if start_date > end_date:
     st.error("Error: La fecha de inicio no puede ser posterior a la fecha de fin.") # Translated

@@ -134,6 +134,29 @@ def save_attendance(date: datetime.date, attendance_data: list):
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
 
+def get_attendance_dates():
+    """
+    Get a list of all dates with saved attendance records.
+    Returns a sorted list of date strings in 'YYYY-MM-DD' format.
+    """
+    try:
+        user_email = st.session_state.email.replace('.', ',')
+        docs = db.child("attendance").child(user_email).get().val()
+        # Extract dates and filter out any None or invalid dates
+        dates = []
+        for doc in docs:
+            try:
+                # Validate date format                    
+                datetime.datetime.strptime(doc, '%Y-%m-%d')
+                dates.append(doc)
+            except (ValueError, TypeError):
+                    continue
+        # Sort dates chronologically
+        return sorted(dates)
+    except Exception as e:
+        st.error(f"Error loading attendance dates: {str(e)}")
+        return []
+
 def format_date_for_display(date_value):
     """
     Convert date to MM/DD/YYYY format for display.
