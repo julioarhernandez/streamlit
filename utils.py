@@ -160,100 +160,89 @@ def get_attendance_dates():
         st.error(f"Error loading attendance dates: {str(e)}")
         return []
 
-def delete_attendance_dates(dates_to_delete=None):
-    print(f"Intentando eliminar {dates_to_delete} DESDE utils1")
-    success = False
+
+def delete_attendance_dates(dates_to_delete=None, delete_all=False):
+    """
+    Delete attendance records for the specified dates or all records if delete_all=True.
     
+    Args:
+        dates_to_delete (list, optional): List of date strings in 'YYYY-MM-DD' format.
+        delete_all (bool, optional): If True, deletes all attendance records for the user.
+        
+    Returns:
+        bool: True if at least one deletion was successful, False otherwise.
+    """
+    print(f"Intentando eliminar fechas: {dates_to_delete}, delete_all={delete_all} DESDE utils")
+    success = False
+
     try:
         user_email_key = st.session_state.email.replace('.', ',')
         user_base_attendance_path = f"attendance/{user_email_key}"
 
-        print(f"DEBUG [utils.py]: User base attendance path for operations: {user_base_attendance_path}")
-
-        # CRITICAL FIX: Only delete all if explicitly None (not empty list!)
-        if dates_to_delete is None:
-            # This case is for deleting ALL records for the user
+        if delete_all:
+            # This case is for explicitly deleting ALL records for the user
             all_user_records_ref = db.child(user_base_attendance_path)
-            print(f"WARNING [utils.py]: Attempting to delete ALL attendance records for user: {user_email_key} at path: {all_user_records_ref.path}")
+            print(f"WARNING: Attempting to delete ALL attendance records at path: {all_user_records_ref.path}")
+            
             if not all_user_records_ref.path or all_user_records_ref.path == '/' or not all_user_records_ref.path.startswith('attendance/'):
-                st.error(f"CRITICAL SAFETY HALT: Attempted to remove a very broad or incorrect path for ALL records: '{all_user_records_ref.path}'. Aborting.")
-                print(f"CRITICAL SAFETY HALT: Path for deleting all records is unsafe: {all_user_records_ref.path}")
+                st.error(f"CRITICAL SAFETY HALT: Unsafe path for full deletion: '{all_user_records_ref.path}'. Aborting.")
+                print(f"CRITICAL SAFETY HALT: Unsafe full deletion path: {all_user_records_ref.path}")
                 return False
-            # all_user_records_ref.remove() # SAFETY: Commented out
-            print(f"INFO [utils.py]: WOULD HAVE REMOVED ALL records for user {user_email_key} at {all_user_records_ref.path} (call currently commented out for safety)")
-            st.error(f"SAFETY PREVENTED DELETION of ALL records at {all_user_records_ref.path}. Check logs.")
-            return True # Simulate success for now
 
-        if not dates_to_delete: # Handle empty list case explicitly
+            try:
+                all_user_records_ref.remove()
+                print(f"SUCCESS: All attendance records removed at path: {all_user_records_ref.path}")
+                return True
+            except Exception as e:
+                print(f"ERROR: Failed to remove all records: {str(e)}")
+                st.error(f"Error al eliminar todos los registros: {str(e)}")
+                return False
+
+        # If no dates provided, we don’t do anything
+        if not dates_to_delete:
             st.warning("No dates provided for deletion.")
-            print("INFO [utils.py]: delete_attendance_dates called with an empty list of dates.")
+            print("INFO: No dates provided, skipping deletion.")
             return False
 
+        # Validate and clean dates
         valid_dates = []
         for date_str in dates_to_delete:
             try:
-                datetime.datetime.strptime(date_str, '%Y-%m-%d') # Corrected: datetime.datetime.strptime
+                datetime.datetime.strptime(date_str, '%Y-%m-%d')
                 valid_dates.append(date_str.strip())
             except ValueError:
                 st.warning(f"Formato de fecha inválido: {date_str}. Se omitirá.")
-                print(f"WARNING [utils.py]: Invalid date format '{date_str}' received.")
-        
+                print(f"WARNING: Invalid date format '{date_str}' ignored.")
+
         if not valid_dates:
             st.error("No hay fechas válidas para eliminar después de la validación.")
-            print("ERROR [utils.py]: No valid dates to process after format validation.")
+            print("ERROR: No valid dates to process after validation.")
             return False
 
-        success = False # Default to false, set to true if at least one deletion would occur
-        print(f"Procesando fechas válidas: {valid_dates}")
-        
         # Delete each valid date
-        for date_str_from_list in valid_dates:
-            clean_date_str = date_str_from_list.strip()
-            if not clean_date_str: 
-                print(f"ERROR [utils.py]: clean_date_str is empty for original date_str: '{date_str_from_list}'")
-                continue
-
-            full_path_to_date_entry = f"{user_base_attendance_path}/{clean_date_str}"
-
-            # Create a reference for GETTING the data
-            ref_for_get = db.child(full_path_to_date_entry)
-            path_of_ref_for_get = ref_for_get.path # Capture path before .get()
-            print(f"DEBUG [utils.py]: Attempting to GET from path: '{path_of_ref_for_get}' (constructed from: '{full_path_to_date_entry}')")
-
-            data_snapshot = ref_for_get.get() # This might alter ref_for_get.path or other state
+        for date_str in valid_dates:
+            full_path = f"{user_base_attendance_path}/{date_str}"
+            ref_for_get = db.child(full_path)
+            data_snapshot = ref_for_get.get()
 
             if data_snapshot.val() is not None:
-                path_of_ref_for_get_after_get = ref_for_get.path # Check path again, just for observation
-                print(f"DEBUG [utils.py]: Data FOUND via path string '{full_path_to_date_entry}'. Path of ref_for_get before get: '{path_of_ref_for_get}', after get: '{path_of_ref_for_get_after_get}'")
-
-                # Create a NEW, PRISTINE reference for REMOVING the data
-                ref_for_remove = db.child(full_path_to_date_entry)
-                path_of_ref_for_remove = ref_for_remove.path # This should be reliable: 'attendance/user/date'
-
-                print(f"INFO [utils.py]: Preparing to remove data using fresh reference. ref_for_remove path: '{path_of_ref_for_remove}'")
-                
-                target_path_for_removal = path_of_ref_for_remove # Use the pristine path from the new reference
-
-                # SAFETY CHECK on the pristine path
-                if not target_path_for_removal or target_path_for_removal == '/' or target_path_for_removal == user_base_attendance_path:
-                    print(f"CRITICAL SAFETY HALT: Attempted to remove a very broad or incorrect path: '{target_path_for_removal}'. Original date_str: '{date_str_from_list}'. Base user path: '{user_base_attendance_path}'. Skipping this deletion.")
-                    st.error(f"SAFETY HALT: Invalid path for deletion: '{target_path_for_removal}'. Check logs.")
-                    continue 
-
-                ref_for_remove.remove() # ACTUAL DELETION
-                print(f"INFO [utils.py]: SUCCESSFULLY REMOVED specific date at relative path {target_path_for_removal}")
-                success = True # Indicate that at least one deletion was successful
-                # The st.error for "SAFETY PREVENTED" is removed as deletion is now active.
-                # The calling page (2_Asistencia.py) will show st.success or st.error based on the return value of this function.
+                print(f"INFO: Removing data at path: {full_path}")
+                try:
+                    db.child(full_path).remove()
+                    success = True
+                except Exception as e:
+                    print(f"ERROR: Failed to remove date {date_str}: {str(e)}")
+                    st.error(f"Error al eliminar la fecha {date_str}: {str(e)}")
             else:
-                print(f"No data found for {clean_date_str} at path '{path_of_ref_for_get}' (derived from '{full_path_to_date_entry}')")
-        
+                print(f"INFO: No data found for date {date_str}, skipping.")
+
         return success
-        
+
     except Exception as e:
         st.error(f"Error deleting attendance records: {str(e)}")
-        print(f"Exception in delete_attendance_dates: {str(e)}")
+        print(f"EXCEPTION: {str(e)}")
         return False
+
 
 def format_date_for_display(date_value):
     """
