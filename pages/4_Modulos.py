@@ -5,6 +5,13 @@ import math
 import uuid # For generating unique module IDs
 from config import setup_page, db # Assuming db is initialized in config.py
 
+# --- Page Setup and Login Check ---
+setup_page("Gestión de Módulos")
+if not st.session_state.get('logged_in', False):
+    st.error("Debe iniciar sesión para acceder a esta página.")
+    st.info("Por favor, regrese a la página principal para iniciar sesión.")
+    st.stop()
+    
 # Function to save a new module to Firebase
 def save_new_module_to_db(user_email, module_data):
     try:
@@ -110,19 +117,14 @@ def load_modules(user_email_from_session):
         # Return an empty DataFrame with expected columns in case of error too
         return pd.DataFrame(columns=expected_cols)
 
-# --- Page Setup and Login Check ---
-setup_page("Gestión de Módulos")
-if not st.session_state.get('logged_in', False):
-    st.error("Debe iniciar sesión para acceder a esta página.")
-    st.info("Por favor, regrese a la página principal para iniciar sesión.")
-    st.stop()
+
 
 user_email = st.session_state.get('email')
 
 # Function to calculate end date based on start date and duration
 def calculate_end_date(start_date, duration_weeks):
     if start_date and duration_weeks:
-        return start_date + datetime.timedelta(weeks=duration_weeks)
+        return start_date + datetime.timedelta(weeks=duration_weeks)-datetime.timedelta(days=1)
     return None
 
 # Initialize session state for dates if not exists
