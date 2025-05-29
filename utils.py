@@ -160,31 +160,35 @@ def get_attendance_dates():
         st.error(f"Error loading attendance dates: {str(e)}")
         return []
 
-def delete_attendance_dates(dates_to_delete):
+def delete_attendance_dates(dates_to_delete=None):
     """
-    Delete attendance records for the specified dates
+    Delete attendance records for the specified dates or all records if no dates provided
     
     Args:
-        dates_to_delete (list): List of date strings in 'YYYY-MM-DD' format
+        dates_to_delete (list, optional): List of date strings in 'YYYY-MM-DD' format.
+                                        If None or empty, deletes all attendance records.
         
     Returns:
-        bool: True if all deletions were successful, False otherwise
+        bool: True if at least one deletion was successful, False otherwise
     """
-    if not dates_to_delete:
-        return False
-        
+    success = False
     try:
         user_email = st.session_state.email.replace('.', ',')
         attendance_ref = db.child("attendance").child(user_email)
         
+        if not dates_to_delete:
+            # Delete all attendance records
+            attendance_ref.remove()
+            return True
+            
+        # Delete specific dates
         for date_str in dates_to_delete:
-            try:
-                attendance_ref.child(date_str).remove()
-            except Exception as e:
-                st.error(f"Error deleting attendance for {date_str}: {str(e)}")
-                continue
-                
-        return True
+            date_ref = attendance_ref.child(date_str)
+            if date_ref.get().val() is not None:
+                date_ref.remove()
+                success = True
+        
+        return success
     except Exception as e:
         st.error(f"Error deleting attendance records: {str(e)}")
         return False

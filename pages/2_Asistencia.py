@@ -174,7 +174,7 @@ with st.expander("Ver lista de fechas"):
                         
                 elif delete_all:
                     if st.toggle("¿Está seguro que desea eliminar TODAS las asistencias?", key="confirm_delete_all"):
-                        if delete_attendance_dates(all_attendance):
+                        if delete_attendance_dates():
                             st.success("Todas las asistencias han sido eliminadas correctamente.")
                             st.rerun()
                         else:
@@ -313,31 +313,6 @@ if st.session_state.prepared_attendance_dfs:
     if not st.session_state.prepared_attendance_dfs:
         st.warning("No hay datos de asistencia preparados para guardar. Vaya al Paso 2 para preparar las tablas de asistencia.")
     else:
-        # Add Save All button at the top
-        if st.button("💾 Guardar Todos los Reportes", type="primary", key="save_all_reports"):
-            save_success = True
-            saved_count = 0
-            
-            for date_obj, df in st.session_state.prepared_attendance_dfs.items():
-                date_str = date_obj.strftime('%Y-%m-%d')
-                attendance_data = df.to_dict('records')
-                if save_attendance(date_obj, attendance_data):
-                    saved_count += 1
-                else:
-                    save_success = False
-                    st.error(f"Error al guardar la asistencia para {date_str}.")
-            
-            if save_success and saved_count > 0:
-                st.toast("✅ ¡Informes guardados exitosamente!", icon="✅")
-                st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
-                st.balloons()
-                # Add delay to ensure toast is visible before rerun
-                time.sleep(3)  # 3 seconds delay
-                st.rerun()
-            elif saved_count == 0:
-                st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
-        
-        st.markdown("---")
         dates_with_data = sorted(st.session_state.prepared_attendance_dfs.keys())
 
         if not dates_with_data:
@@ -365,7 +340,7 @@ if st.session_state.prepared_attendance_dfs:
                 )
                 st.session_state.prepared_attendance_dfs[selected_date_obj] = edited_df  # Update with edits
 
-                col1, col2, col3 = st.columns([3, 3, 2])
+                col1, col2, _ = st.columns([2, 3, 2])
                 with col1:
                     if st.button(f"💾 Guardar {selected_date_str}", key=f"save_{selected_date_str}"):
                         attendance_data_to_save = edited_df.to_dict('records')
@@ -375,13 +350,36 @@ if st.session_state.prepared_attendance_dfs:
                         else:
                             st.error(f"Error al guardar asistencia para {selected_date_str}.")
                 with col2:
-                    if st.button("🗑️ Limpiar Datos Cargados", type="primary"):
+                    if st.button("🗑️ Limpiar Datos Cargados"):
                         st.session_state.current_batch_data_by_date = {}
                         st.session_state.prepared_attendance_dfs = {}
                         st.session_state.processed_files_this_session = set()
                         st.rerun()
-                with col3:
-                    if st.button("🔄 Actualizar Vista", help="Actualiza la vista sin guardar cambios"):
+                
+                # Add Save All button at the top
+                if st.button("💾 Guardar Todos los Reportes", type="primary", key="save_all_reports"):
+                    save_success = True
+                    saved_count = 0
+                    
+                    for date_obj, df in st.session_state.prepared_attendance_dfs.items():
+                        date_str = date_obj.strftime('%Y-%m-%d')
+                        attendance_data = df.to_dict('records')
+                        if save_attendance(date_obj, attendance_data):
+                            saved_count += 1
+                        else:
+                            save_success = False
+                            st.error(f"Error al guardar la asistencia para {date_str}.")
+                    
+                    if save_success and saved_count > 0:
+                        st.toast("¡Informes guardados exitosamente!", icon="✅")
+                        st.success(f"¡Se guardaron exitosamente {saved_count} reporte(s) de asistencia!")
+                        st.balloons()
+                        # Add delay to ensure toast is visible before rerun
+                        time.sleep(3)  # 3 seconds delay
                         st.rerun()
+                    elif saved_count == 0:
+                        st.warning("No se pudo guardar ningún reporte. Por favor intente de nuevo.")
+                
+                st.markdown("---")
             else:
                 st.warning("La fecha seleccionada ya no tiene datos preparados. Por favor, recargue o seleccione otra fecha.")
