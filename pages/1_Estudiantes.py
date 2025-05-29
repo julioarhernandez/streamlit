@@ -123,7 +123,7 @@ if submit_add_students_text:
 st.divider()
 
 # --- Display and Manage Current Students ---
-st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded)})")
+st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
 df_loaded, _ = load_students()
 
 if df_loaded is not None and not df_loaded.empty:
