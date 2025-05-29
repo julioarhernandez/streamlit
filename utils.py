@@ -27,13 +27,38 @@ def save_students(students_df):
     """Save students data to Firebase"""
     try:
         user_email = st.session_state.email.replace('.', ',')
-        # Ensure column names are strings before saving to_dict('records')
-        students_df.columns = students_df.columns.astype(str)
+        # Create a copy of the dataframe to avoid modifying the original
+        df = students_df.copy()
+        
+        # Ensure all data is JSON-serializable
+        for col in df.columns:
+            # Convert any numpy types to native Python types
+            if df[col].dtype.kind in ['i', 'u', 'f', 'b']:  # numeric types
+                df[col] = df[col].astype('object').where(df[col].notna(), None)
+            # Convert datetime to string
+            elif df[col].dtype.kind == 'M':  # datetime
+                df[col] = df[col].dt.strftime('%Y-%m-%d')
+        
+        # Convert to dictionary with records orientation
+        records = df.to_dict('records')
+        
+        # Ensure all values in records are JSON-serializable
+        for record in records:
+            for key, value in record.items():
+                if pd.isna(value) or value is None:
+                    record[key] = None
+                elif isinstance(value, (int, float, bool, str)):
+                    continue  # These are already JSON-serializable
+                else:
+                    record[key] = str(value)  # Convert any remaining types to string
+        
         data = {
-            'filename': 'students.xlsx', # Or derive from an uploaded filename if relevant
-            'data': students_df.to_dict('records'),
-            'timestamp': pd.Timestamp.now(tz='UTC').isoformat() # Use timezone-aware timestamp
+            'filename': 'students.xlsx',
+            'data': records,
+            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'  # ISO format with timezone
         }
+        
+        # Save to Firebase
         db.child("students").child(user_email).set(data)
         return True
     except Exception as e:

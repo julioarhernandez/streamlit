@@ -59,23 +59,30 @@ if uploaded_file is not None:
         else:
             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
             
-            # Get the selected module's start date if available
-            start_date = None
+            # Get the selected module's details if available
+            module_info = {}
             if 'selected_module' in st.session_state:
-                start_date = st.session_state.selected_module.get('start_date')
-                if isinstance(start_date, str):
+                module_info = {
+                    'fecha_inicio': st.session_state.selected_module.get('start_date'),
+                    'modulo': st.session_state.selected_module.get('module_name'),
+                    'ciclo': st.session_state.selected_module.get('ciclo')
+                }
+                
+                if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
                     try:
                         # Convert to datetime and format consistently
-                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%Y-%m-%d')
-                        # Add start date to all uploaded students
-                        df_upload['fecha_inicio'] = start_date
+                        module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
+                        # Add module info to all uploaded students
+                        df_upload['fecha_inicio'] = module_info['fecha_inicio']
+                        df_upload['modulo'] = module_info['modulo']
+                        df_upload['ciclo'] = module_info['ciclo']
                     except (ValueError, TypeError):
-                        pass  # If date conversion fails, proceed without it
+                        module_info = {}  # Reset if date conversion fails
             
             st.subheader("Vista Previa del Archivo Subido")
             st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
-            if start_date:
-                st.info(f"Se asignará la fecha de inicio del módulo: {start_date}")
+            if module_info.get('fecha_inicio'):
+                st.info(f"Se asignará el módulo '{module_info['modulo']}' (Ciclo {module_info['ciclo']}) con fecha de inicio: {module_info['fecha_inicio']}")
             st.dataframe(df_upload)
             
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
@@ -128,24 +135,32 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     unique_potential_new_names.append(name)
                     seen_in_input.add(normalized_name)
             
-            # Get the selected module's start date if available
-            start_date = None
+            # Get the selected module's details if available
+            module_info = {}
             if 'selected_module' in st.session_state:
-                print(st.session_state.selected_module)
-                start_date = st.session_state.selected_module.get('start_date')
-                if isinstance(start_date, str):
+                module_info = {
+                    'fecha_inicio': st.session_state.selected_module.get('start_date'),
+                    'modulo': st.session_state.selected_module.get('module_name'),
+                    'ciclo': st.session_state.selected_module.get('ciclo')
+                }
+                
+                if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
                     try:
                         # Convert to datetime and format consistently
-                        start_date = datetime.datetime.fromisoformat(start_date).strftime('%Y-%m-%d')
+                        module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
                     except (ValueError, TypeError):
-                        start_date = None
+                        module_info = {}  # Reset if date conversion fails
 
             for name in unique_potential_new_names:
                 normalized_name = name.lower().strip()
                 if normalized_name not in existing_normalized_names:
                     student_data = {'nombre': name}
-                    if start_date:
-                        student_data['fecha_inicio'] = start_date
+                    if module_info.get('fecha_inicio'):
+                        student_data.update({
+                            'fecha_inicio': module_info['fecha_inicio'],
+                            'modulo': module_info['modulo'],
+                            'ciclo': module_info['ciclo']
+                        })
                     students_to_add_list.append(student_data)
                     added_count += 1
                 else:
