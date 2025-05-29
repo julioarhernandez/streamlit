@@ -168,14 +168,29 @@ try:
                         'ciclo': 2,
                         'start_date': module_data['ciclo2_inicio']
                     })
+
+    #
+    # Start date sorting
+    #
     
-    # Sort modules by start date (most recent first)
-    module_options.sort(key=lambda x: x.get('start_date', ''), reverse=True)
+    today = datetime.datetime.today()
+    cutoff_date = today - datetime.timedelta(days=15)
+
+    # Filter out old past dates
+    filtered_module_options = [
+        module for module in module_options
+        if datetime.datetime.fromisoformat(module['start_date']) >= cutoff_date
+    ]
+
+    # Sort by closeness to today
+    filtered_module_options.sort(
+        key=lambda x: abs((datetime.datetime.fromisoformat(x['start_date']) - today).days)
+    )
     
-    if module_options:
+    if filtered_module_options:
         selected_module = st.selectbox(
             "Seleccione un módulo para agregar a los nuevos estudiantes:",
-            options=module_options,
+            options=filtered_module_options,
             format_func=lambda x: x['label'],
             index=0
         )
