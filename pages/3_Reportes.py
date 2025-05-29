@@ -51,14 +51,12 @@ with col2:
         format="MM/DD/YYYY"
     )
 
-
-# Show available attendance dates
-st.caption("Asistencia(s) guardada(s):")
 try:
     # Get all attendance dates
     all_attendance = get_attendance_dates()
     
     if all_attendance:
+        st.caption("Asistencia(s) guardada(s):")
         # Display dates in a grid
         all_badges = " ".join([f":gray-badge[:material/calendar_today: {datetime.datetime.strptime(date_str, '%Y-%m-%d').date().strftime('%m-%d-%Y')}] " for date_str in all_attendance])
         st.markdown(all_badges)

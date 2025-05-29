@@ -20,7 +20,7 @@ setup_page("Gestión de Asistencia")
 
 # --- Session State Initialization ---
 if 'uploader_key_suffix' not in st.session_state:
-    st.session_state.uploader_key_suffix = "initial_attendance"
+    st.session_state.uploader_key_suffix = 0  # Initialize as integer
 
 if 'current_batch_data_by_date' not in st.session_state:
     st.session_state.current_batch_data_by_date = {}
@@ -175,6 +175,13 @@ with st.expander("Ver lista de fechas"):
                 elif delete_all:
                     if st.toggle("¿Está seguro que desea eliminar TODAS las asistencias?", key="confirm_delete_all"):
                         if delete_attendance_dates():
+                            # Clear all relevant session state variables
+                            uploaded_reports = []
+                            st.session_state.current_batch_data_by_date = {}
+                            st.session_state.prepared_attendance_dfs = {}
+                            st.session_state.processed_files_this_session = set()
+                            # Increment the uploader key suffix to force a new file uploader
+                            st.session_state.uploader_key_suffix += 1
                             st.success("Todas las asistencias han sido eliminadas correctamente.")
                             st.rerun()
                         else:
