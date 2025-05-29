@@ -33,7 +33,7 @@ today = datetime.date.today()
 # Default start date to the first day of the current month for a more common report view
 default_start_date = today.replace(day=1) 
 
-# Format date inputs with YYYY-MM-DD format
+# Format date inputs with MM/DD/YYYY format
 start_date = st.date_input(
     "Fecha de Inicio", 
     value=default_start_date,
@@ -132,18 +132,57 @@ else:
             warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período (incluyendo fines de semana si hubo datos):" # Translated
             st.warning(warning_msg)
             
-            # Create DataFrame for display
-            df_never_attended = pd.DataFrame(students_never_attended_list, columns=["Nombre del Estudiante"]) # Translated column
+            # Get student data with start dates
+            all_students_df, _ = load_students()
+            
+            # Create DataFrame for display with start dates
+            never_attended_data = []
+            for student_name in students_never_attended_list:
+                student_data = all_students_df[all_students_df['nombre'].str.strip().str.lower() == student_name.lower()].iloc[0] if not all_students_df.empty else {}
+                start_date = student_data.get('fecha_inicio', 'No especificada')
+                if start_date and pd.notna(start_date) and start_date != 'No especificada':
+                    try:
+                        # Format the date for display
+                        start_date = datetime.datetime.strptime(str(start_date), '%Y-%m-%d').strftime('%d/%m/%Y')
+                        
+                    except (ValueError, TypeError):
+                        pass
+                never_attended_data.append({
+                    'Nombre del Estudiante': student_name,
+                    'Fecha de Inicio': start_date if start_date and pd.notna(start_date) else 'No especificada'
+                })
+            
+            df_never_attended = pd.DataFrame(never_attended_data)
             st.dataframe(df_never_attended, use_container_width=True, hide_index=True)
             
             # Add CSV download for this list
-            csv_never_attended = df_never_attended.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Descargar Lista de Estudiantes que Nunca Asistieron (Todos los Días) como CSV", # Translated
-                data=csv_never_attended,
-                file_name=f"nunca_asistieron_todos_los_dias_{start_date.strftime('%Y%m%d')}_a_{end_date.strftime('%Y%m%d')}.csv", # Translated filename
-                mime='text/csv',
-                key='download_never_attended_csv_btn'
-            )
+            csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
+            
+            # Format dates for the filename
+            start_date_str = start_date.strftime('%m/%d/%Y') if hasattr(start_date, 'strftime') else start_date
+            end_date_str = end_date.strftime('%m/%d/%Y') if hasattr(end_date, 'strftime') else end_date
+            
+            # Convert to datetime objects if they're strings
+            try:
+                # First try parsing as MM/DD/YYYY (input format)
+                start_date_obj = datetime.datetime.strptime(start_date_str, '%m/%d/%Y')
+                end_date_obj = datetime.datetime.strptime(end_date_str, '%m/%d/%Y')
+                
+                st.download_button(
+                    label="Descargar Lista de Estudiantes que Nunca Asistieron (Todos los Días) como CSV",
+                    data=csv_never_attended,
+                    file_name=f"nunca_asistieron_todos_los_dias_{start_date_obj.strftime('%Y%m%d')}_a_{end_date_obj.strftime('%Y%m%d')}.csv",
+                    mime='text/csv; charset=utf-8-sig',
+                    key='download_never_attended_csv_btn'
+                )
+            except (ValueError, AttributeError) as e:
+                st.error(f"Error al formatear las fechas: {str(e)}")
+                st.download_button(
+                    label="Descargar Lista de Estudiantes que Nunca Asistieron (Todos los Días) como CSV",
+                    data=csv_never_attended,
+                    file_name="nunca_asistieron_todos_los_dias.csv",
+                    mime='text/csv; charset=utf-8-sig',
+                    key='download_never_attended_csv_btn_fallback'
+                )
         else:
             st.success("Todos los estudiantes registrados asistieron al menos una vez en el rango de fechas seleccionado (considerando todos los días).") # Translated
