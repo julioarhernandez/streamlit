@@ -207,3 +207,46 @@ def create_filename_date_range(start_date, end_date):
         return f"_{start_str}_a_{end_str}"
     except (ValueError, AttributeError, TypeError):
         return ""
+
+def date_format(date_value, from_format, to_format='%m/%d/%Y'):
+    """
+    Convert date from one format to another.
+    
+    Args:
+        date_value (str/datetime): The date to convert
+        from_format (str): The format of the input date (e.g., '%Y/%m/%d')
+        to_format (str): The desired output format (default: '%m/%d/%Y')
+    
+    Returns:
+        str: Formatted date string or 'No especificada' if conversion fails
+    
+    Examples:
+        date_format("2025/10/31", "%Y/%m/%d") -> "10/31/2025"
+        date_format("31-10-2025", "%d-%m-%Y") -> "10/31/2025"
+        date_format("2025-10-31", "%Y-%m-%d", "%d/%m/%Y") -> "31/10/2025"
+    """
+    if not date_value or pd.isna(date_value):
+        return 'No especificada'
+    
+    try:
+        # Handle datetime objects
+        if hasattr(date_value, 'strftime'):
+            return date_value.strftime(to_format)
+        
+        # Handle string dates
+        if isinstance(date_value, str):
+            date_str = str(date_value).strip()
+            if date_str.lower() in ['', 'no especificada', 'none']:
+                return 'No especificada'
+            
+            # Parse with the specified format
+            date_obj = datetime.datetime.strptime(date_str, from_format)
+            return date_obj.strftime(to_format)
+        
+        # Try converting other types to string first
+        date_str = str(date_value).strip()
+        date_obj = datetime.datetime.strptime(date_str, from_format)
+        return date_obj.strftime(to_format)
+        
+    except (ValueError, TypeError, AttributeError):
+        return 'No especificada'

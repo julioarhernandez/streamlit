@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import format_date_for_display, create_filename_date_range, get_student_start_date
+from utils import format_date_for_display, create_filename_date_range, get_student_start_date, date_format
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -96,7 +96,7 @@ else:
                 spanish_day_name = SPANISH_DAY_NAMES.get(english_day_name, english_day_name) # Fallback to English if not found
                 
                 daily_summary_data.append({
-                    'Fecha': current_date_iter.strftime('%Y-%m-%d'), # Keep 'Fecha' or 'Date'
+                    'Fecha': date_format(current_date_iter, '%Y-%m-%d'), # Keep 'Fecha' or 'Date'
                     'Día': spanish_day_name.capitalize(), # Spanish Day Name, capitalized
                     '# Presentes': present_today_count, # Translated
                     '# Ausentes': absent_today_count    # Translated
