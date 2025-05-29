@@ -387,6 +387,41 @@ def date_format(date_value, from_format, to_format='%m/%d/%Y'):
         return 'No especificada'
 
 
+def get_highest_module_credit(user_email: str) -> int:
+    """
+    Get the highest module credit/order number from all modules.
+    
+    Args:
+        user_email: The user's email (with . replaced with ,)
+        
+    Returns:
+        int: The highest credit value found, or 0 if no modules exist
+    """
+    try:
+        # Create a fresh Firebase reference for this operation
+        modules_ref = db.child("modules").child(user_email).get()
+        if not modules_ref.val():
+            return 0
+            
+        max_credit = 0
+        for module_id, module_data in modules_ref.val().items():
+            if not module_data or not isinstance(module_data, dict):
+                continue
+                
+            credit = module_data.get('credits')
+            try:
+                credit = int(credit) if credit is not None else 0
+                max_credit = max(max_credit, credit)
+            except (ValueError, TypeError):
+                continue
+                
+        return max_credit
+        
+    except Exception as e:
+        st.error(f"Error al obtener el crédito máximo del módulo: {str(e)}")
+        return 0
+
+
 def get_module_on_date(user_email: str, target_date: datetime.date = None) -> dict:
     """
     Find a module that contains the specified date within any of its cycles.
@@ -403,6 +438,7 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None) -> di
             'ciclo': int,
             'start_date': str (ISO format),
             'end_date': str (ISO format)
+            'credits': int
         }
     """
     if target_date is None:
@@ -445,7 +481,8 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None) -> di
                                 'module_name': module_name,
                                 'ciclo': ciclo,
                                 'start_date': start_date.isoformat(),
-                                'end_date': end_date.isoformat()
+                                'end_date': end_date.isoformat(),
+                                'credits': module_data.get('credits', 0)
                             }
                             
                     except (ValueError, TypeError) as e:
