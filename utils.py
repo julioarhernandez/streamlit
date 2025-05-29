@@ -133,3 +133,77 @@ def save_attendance(date: datetime.date, attendance_data: list):
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
+
+def format_date_for_display(date_value):
+    """
+    Convert date to MM/DD/YYYY format for display.
+    Handles various input formats and edge cases.
+    """
+    if not date_value or pd.isna(date_value):
+        return 'No especificada'
+    
+    try:
+        # Handle different input types
+        if isinstance(date_value, str):
+            if date_value.strip().lower() in ['', 'no especificada', 'none']:
+                return 'No especificada'
+            # Try common date formats
+            for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y']:
+                try:
+                    date_obj = datetime.datetime.strptime(str(date_value).strip(), fmt)
+                    return date_obj.strftime('%m/%d/%Y')
+                except ValueError:
+                    continue
+        elif hasattr(date_value, 'strftime'):
+            # Already a datetime object
+            return date_value.strftime('%m/%d/%Y')
+        else:
+            # Try converting to string first
+            return format_date_for_display(str(date_value))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    
+    return 'No especificada'
+
+def get_student_start_date(all_students_df, student_name):
+    """
+    Get start date for a specific student.
+    Returns formatted date string or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    start_date = student_data.get('fecha_inicio', 'No especificada')
+    
+    return format_date_for_display(start_date)
+
+def create_filename_date_range(start_date, end_date):
+    """
+    Create a date range string for filename from start and end dates.
+    Returns formatted string or None if dates are invalid.
+    """
+    try:
+        # Handle different input types
+        if hasattr(start_date, 'strftime'):
+            start_str = start_date.strftime('%Y%m%d')
+        else:
+            start_obj = datetime.datetime.strptime(str(start_date), '%m/%d/%Y')
+            start_str = start_obj.strftime('%Y%m%d')
+        
+        if hasattr(end_date, 'strftime'):
+            end_str = end_date.strftime('%Y%m%d')
+        else:
+            end_obj = datetime.datetime.strptime(str(end_date), '%m/%d/%Y')
+            end_str = end_obj.strftime('%Y%m%d')
+        
+        return f"_{start_str}_a_{end_str}"
+    except (ValueError, AttributeError, TypeError):
+        return ""

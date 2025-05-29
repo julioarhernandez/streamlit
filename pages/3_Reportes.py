@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
+from utils import format_date_for_display, create_filename_date_range, get_student_start_date
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -129,60 +130,58 @@ else:
         students_never_attended_list = sorted(list(master_student_list - students_present_in_range))
         
         if students_never_attended_list:
-            warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período:" # Translated
+            warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período:"
             st.warning(warning_msg)
             
             # Get student data with start dates
-            all_students_df, _ = load_students()
+            try:
+                all_students_df, _ = load_students()
+            except Exception as e:
+                st.error(f"Error loading student data: {str(e)}")
+                all_students_df = pd.DataFrame()
             
             # Create DataFrame for display with start dates
             never_attended_data = []
             for student_name in students_never_attended_list:
-                student_data = all_students_df[all_students_df['nombre'].str.strip().str.lower() == student_name.lower()].iloc[0] if not all_students_df.empty else {}
-                start_date = student_data.get('fecha_inicio', 'No especificada')
-                if start_date and pd.notna(start_date) and start_date != 'No especificada':
-                    try:
-                        # Format the date for display
-                        start_date = datetime.datetime.strptime(str(start_date), '%Y-%m-%d').strftime('%d/%m/%Y')
-                        
-                    except (ValueError, TypeError):
-                        pass
+                start_date = get_student_start_date(all_students_df, student_name)
                 never_attended_data.append({
-                    'Nombre del Estudiante': student_name,
-                    'Fecha de Inicio': start_date if start_date and pd.notna(start_date) else 'No especificada'
+                    'Nombre del Estudiante': student_name.strip(),
+                    'Fecha de Inicio': start_date
                 })
             
+            # Display the dataframe
             df_never_attended = pd.DataFrame(never_attended_data)
             st.dataframe(df_never_attended, use_container_width=True, hide_index=True)
             
-            # Add CSV download for this list
-            csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
-            
-            # Format dates for the filename
-            start_date_str = start_date.strftime('%m/%d/%Y') if hasattr(start_date, 'strftime') else start_date
-            end_date_str = end_date.strftime('%m/%d/%Y') if hasattr(end_date, 'strftime') else end_date
-            
-            # Convert to datetime objects if they're strings
+            # Create CSV download
             try:
-                # First try parsing as MM/DD/YYYY (input format)
-                start_date_obj = datetime.datetime.strptime(start_date_str, '%m/%d/%Y')
-                end_date_obj = datetime.datetime.strptime(end_date_str, '%m/%d/%Y')
+                csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
+                
+                # Create filename with date range
+                date_suffix = create_filename_date_range(start_date, end_date)
+                filename = f"nunca_asistieron{date_suffix}.csv"
                 
                 st.download_button(
                     label="Descargar Lista de Estudiantes que Nunca Asistieron",
                     data=csv_never_attended,
-                    file_name=f"nunca_asistieron_{start_date_obj.strftime('%Y%m%d')}_a_{end_date_obj.strftime('%Y%m%d')}.csv",
+                    file_name=filename,
                     mime='text/csv; charset=utf-8-sig',
                     key='download_never_attended_csv_btn'
                 )
-            except (ValueError, AttributeError) as e:
-                st.error(f"Error al formatear las fechas: {str(e)}")
-                st.download_button(
-                    label="Descargar Lista de Estudiantes que Nunca Asistieron",
-                    data=csv_never_attended,
-                    file_name="nunca_asistieron.csv",
-                    mime='text/csv; charset=utf-8-sig',
-                    key='download_never_attended_csv_btn_fallback'
-                )
+            except Exception as e:
+                st.error(f"Error creating download file: {str(e)}")
+                # Fallback download without date range
+                try:
+                    csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="Descargar Lista de Estudiantes que Nunca Asistieron",
+                        data=csv_never_attended,
+                        file_name="nunca_asistieron.csv",
+                        mime='text/csv; charset=utf-8-sig',
+                        key='download_never_attended_csv_btn_fallback'
+                    )
+                except Exception as fallback_e:
+                    st.error(f"Error creating fallback download: {str(fallback_e)}")
+
         else:
-            st.success("Todos los estudiantes registrados asistieron al menos una vez en el rango de fechas seleccionado (considerando todos los días).") # Translated
+            st.success("Todos los estudiantes registrados asistieron al menos una vez en el rango de fechas seleccionado (considerando todos los días).")
