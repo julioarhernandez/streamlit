@@ -288,7 +288,7 @@ if df_loaded is not None and not df_loaded.empty:
 
         st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
         
-        column_order = ["Eliminar", "nombre", "modulo", "fecha_inicio", "ciclo"]
+        column_order = ["Eliminar",  "canvas_id", "nombre",  "email", "telefono", "fecha_inicio", "modulo", "ciclo"]
 
         # Make a copy of the dataframe for editing
         editable_df = df_display[column_order].copy()
@@ -330,7 +330,7 @@ if df_loaded is not None and not df_loaded.empty:
                     "Módulo",
                     help="Módulo actual del estudiante",
                     disabled=True,
-                    width="medium"
+                    width="small"
                 ),
                 "fecha_inicio": st.column_config.DateColumn(
                     "Fecha de Inicio",
@@ -348,7 +348,7 @@ if df_loaded is not None and not df_loaded.empty:
             },
             hide_index=True,
             use_container_width=True,
-            num_rows="dynamic",
+            num_rows="fixed",
             key=f"students_editor_{st.session_state.get('editor_key', 0)}"
         )
 
