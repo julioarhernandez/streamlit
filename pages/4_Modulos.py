@@ -248,7 +248,7 @@ with st.container():
     
     # Add a submit button that will handle the form submission
     submitted_new_module = st.button("Agregar Módulo")
-
+    
     if submitted_new_module and user_email:
         if not module_name:
             st.warning("El nombre del módulo es obligatorio.")
@@ -312,11 +312,10 @@ if user_email:
             "description": st.column_config.TextColumn("Descripción", width="small"),
             "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small", help="Número de orden del módulo"),
             "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
-            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, disabled=True, width="small"),
-            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, disabled=True, width="small"),
-            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, disabled=True, width="small"),
-            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, disabled=True, width="small")
-            # 'created_at' could also be displayed as disabled if desired
+            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, width="small"),
+            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, width="small"),
+            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, width="small"),
+            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, width="small")
         }
         
         display_cols_in_editor = []
@@ -364,7 +363,13 @@ if user_email:
             "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar")
         }
         
-        # Show the editor with the delete checkbox
+        # Convert date columns to datetime if they're not already
+        date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
+        for col in date_columns:
+            if col in df_to_edit.columns:
+                df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
+        
+        # Show the editor
         edited_df = st.data_editor(
             df_to_edit,
             column_config=column_config,
@@ -372,7 +377,7 @@ if user_email:
             num_rows="fixed",  # Prevents adding new rows
             key="modules_editor_main",
             use_container_width=True,
-            disabled=("module_id", "firebase_key"),
+            disabled=("module_id", "firebase_key"),  # Only disable non-editable fields
             on_change=None
         )
         

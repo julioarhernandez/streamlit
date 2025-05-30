@@ -117,19 +117,55 @@ if df_loaded is not None and not df_loaded.empty:
 
     def calculate_status(row):
         remaining_str = str(row.get('Módulos Restantes', '')).strip()
-        if remaining_str == '0':
-            return "Graduado"
-        elif remaining_str.isdigit() and int(remaining_str) > 0:
-            return "En curso"
-        elif remaining_str == 'Sin fecha de inicio':
-            return "Sin fecha"
-        elif remaining_str == 'Módulo no encontrado':
-            return "Módulo no encontrado"
-        else:
+        today = datetime.date.today()
+        
+        try:
+            # Check if student has a module end date
+            if 'fecha_fin_modulo' in row and pd.notna(row['fecha_fin_modulo']):
+                try:
+                    module_end_date = pd.to_datetime(row['fecha_fin_modulo']).date()
+                    if today > module_end_date and remaining_str == '0':
+                        return "Graduado"
+                except (ValueError, TypeError):
+                    pass  # If date conversion fails, continue with normal status check
+            
+            # If not graduated, check remaining modules
+            if remaining_str == '0':
+                return "Último"
+            elif remaining_str.isdigit() and int(remaining_str) > 0:
+                return "En curso"
+            elif remaining_str == 'Sin fecha de inicio':
+                return "Sin fecha"
+            elif remaining_str == 'Módulo no encontrado':
+                return "Módulo no encontrado"
+            else:
+                return "Error"
+                
+        except Exception as e:
+            print(f"Error calculando estado para {row.get('nombre', 'desconocido')}: {str(e)}")
             return "Error"
 
-    # Add remaining modules column
+    # Add remaining modules column and get module end dates
     df_loaded['Módulos Restantes'] = df_loaded.apply(calculate_remaining_modules, axis=1)
+    
+    # Get module end dates for each student
+    def get_module_end_date(row):
+        try:
+            if pd.isna(row.get('fecha_inicio')) or not row['fecha_inicio']:
+                return None
+                
+            start_date = pd.to_datetime(row['fecha_inicio']).date()
+            user_email = st.session_state.get('email', '').replace('.', ',')
+            student_module = get_module_on_date(user_email, start_date)
+            
+            if student_module and 'end_date' in student_module:
+                return student_module['end_date']
+            return None
+        except Exception as e:
+            print(f"Error obteniendo fecha de fin para {row.get('nombre', 'desconocido')}: {str(e)}")
+            return None
+    
+    df_loaded['fecha_fin_modulo'] = df_loaded.apply(get_module_end_date, axis=1)
     df_loaded['Estado'] = df_loaded.apply(calculate_status, axis=1)
     if 'nombre' not in df_loaded.columns:
         st.error("Los datos de los estudiantes no tienen la columna 'nombre', que es obligatoria.")
@@ -152,6 +188,11 @@ if df_loaded is not None and not df_loaded.empty:
                     help="Edite el nombre del estudiante",
                     width="medium",
                     required=True
+                ),
+                "modulo": st.column_config.TextColumn(
+                    "Módulo de Inicio",
+                    help="Módulo del estudiante",
+                    width="small"
                 ),
                 "Módulos Restantes": st.column_config.TextColumn(
                     "Módulos Restantes",
