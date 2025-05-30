@@ -3,10 +3,8 @@ import pandas as pd
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import (
-    load_attendance, load_students, save_students,
-    get_module_on_date, get_highest_module_credit,
-    format_date_for_display, create_filename_date_range,
-    get_student_start_date, date_format, get_attendance_dates
+    load_students,
+    get_module_on_date, get_highest_module_credit
 )
 
 # --- Login Check ---
@@ -20,7 +18,7 @@ setup_page("Reporte de Estudiantes")
 df_loaded, _ = load_students()
 
 # Remove 'ciclo' column if it exists
-if 'ciclo' in df_loaded.columns:
+if df_loaded is not None and not df_loaded.empty and 'ciclo' in df_loaded.columns:
     df_loaded = df_loaded.drop(columns=['ciclo'])
 
 # Manual Spanish day name mapping to avoid locale/encoding issues
@@ -162,7 +160,7 @@ if df_loaded is not None and not df_loaded.empty:
     c.metric("Último Módulo", last_module, border=True)
     d.metric("Graduados", graduated, border=True)
 else:
-    st.subheader("Estudiantes Actuales (Total: 0) - Graduados: 0, En Curso: 0, Último Módulo: 0")
+    st.subheader("Estudiantes Actuales (Total: 0)")
 
 if df_loaded is not None and not df_loaded.empty:
     # Get highest module credit for the user

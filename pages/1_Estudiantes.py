@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from config import setup_page, db
+from config import setup_page
 from utils import save_students, load_students, get_available_modules
 
 

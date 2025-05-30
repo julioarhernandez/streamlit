@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import format_date_for_display, create_filename_date_range, get_student_start_date, date_format, get_attendance_dates
+from utils import create_filename_date_range, get_student_start_date, date_format, get_attendance_dates
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):

@@ -5,7 +5,7 @@ import datetime
 import re
 import io
 import time
-from utils import save_attendance, load_students, load_attendance, delete_attendance_dates, get_attendance_dates
+from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates
 from config import setup_page
 
 # --- Login Check ---
