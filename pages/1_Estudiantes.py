@@ -229,8 +229,10 @@ if df_loaded is not None and not df_loaded.empty:
 
         st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
         
+        column_order = ["Eliminar", "nombre", "modulo", "fecha_inicio", "ciclo"]
+
         # Make a copy of the dataframe for editing
-        editable_df = df_display.copy()
+        editable_df = df_display[column_order].copy()
     
 
         # Display the editable table
@@ -240,7 +242,7 @@ if df_loaded is not None and not df_loaded.empty:
             hide_index=True,
             column_config={
                 "Eliminar": st.column_config.CheckboxColumn(
-                    "Eliminar",
+                    "Borrar",
                     help="Seleccione estudiantes para eliminar",
                     default=False,
                     width="small",
@@ -249,8 +251,24 @@ if df_loaded is not None and not df_loaded.empty:
                 "nombre": st.column_config.TextColumn(
                     "Nombre del Estudiante",
                     help="Edite el nombre del estudiante",
-                    width="large",
+                    width="medium",
                     required=True
+                ),
+                "modulo": st.column_config.TextColumn(
+                    "Inició en",
+                    help="Módulo en el que inició el estudiante",
+                    width="small"
+                ),
+                "fecha_inicio": st.column_config.TextColumn(
+                    "Fecha de Inicio",
+                    help="Fecha de inicio del estudiante (formato: YYYY-MM-DD)",
+                    width="small"
+                ),
+                "ciclo": st.column_config.NumberColumn(
+                    "Ciclo",
+                    help="Ciclo del estudiante (número entero)",
+                    width="small",
+                    format="%d"  # Display as integer
                 )
             },
             key="students_editor"

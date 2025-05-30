@@ -309,7 +309,6 @@ if user_email:
             "firebase_key": st.column_config.TextColumn("Firebase Key", disabled=True, help="Clave única de Firebase para este módulo"),
             "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
             "name": st.column_config.TextColumn("Nombre del Módulo", required=True, width="medium"),
-            "description": st.column_config.TextColumn("Descripción", width="small"),
             "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small", help="Número de orden del módulo"),
             "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
             "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, width="small"),
@@ -325,7 +324,6 @@ if user_email:
         display_columns = [
             'firebase_key',
             'name', 
-            'description', 
             'duration_weeks', 
             'credits',
             'ciclo1_inicio',
@@ -357,7 +355,7 @@ if user_email:
         
         # Configure columns for the editor
         column_config = {
-            "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar", pinned=True),
+            "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", pinned=True),
             **final_column_config,
             "module_id": None,  # Hide module_id from display
             "firebase_key": None,  # Hide firebase_key from display but keep in data
