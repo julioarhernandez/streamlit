@@ -252,37 +252,35 @@ def delete_student(student_nombre_to_delete: str) -> bool:
         if current_students_df is None:
             st.error("No students found to delete from.")
             return False
-
-        # Normalize the name to delete for comparison, similar to how names are stored/loaded
+            
+        # Normalize the name to delete for comparison
         normalized_name_to_delete = str(student_nombre_to_delete).lower().strip()
 
         # Create a boolean series for rows to keep
-        # Ensure 'nombre' column exists and is string type for comparison
         if 'nombre' not in current_students_df.columns:
             st.error("Student data is missing 'nombre' column. Cannot delete.")
             return False
         
-        # Filter out the student to delete
-        # Compare normalized versions
+        # Filter out the student to delete (case-insensitive comparison)
         students_to_keep_df = current_students_df[
             current_students_df['nombre'].astype(str).str.lower().str.strip() != normalized_name_to_delete
         ]
 
         if len(students_to_keep_df) == len(current_students_df):
             st.warning(f"Student '{student_nombre_to_delete}' not found in the list.")
-            return False # Or True, if not finding is not an error
+            return False
 
         # Save the modified DataFrame (which overwrites the old list)
         if save_students(students_to_keep_df):
+            # Note: save_students already calls set_last_updated('students')
             st.success(f"Student '{student_nombre_to_delete}' deleted successfully.")
-            set_last_updated('students')
             return True
         else:
             # save_students would have shown an error
             return False
             
     except Exception as e:
-        st.error(f"Error deleting student '{student_nombre_to_delete}': {str(e)}")
+        st.error(f"Error deleting student: {str(e)}")
         return False
 
 def save_attendance(date: datetime.date, attendance_data: list):
@@ -364,6 +362,9 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
             try:
                 all_user_records_ref.remove()
                 print(f"SUCCESS: All attendance records removed at path: {all_user_records_ref.path}")
+                print(f"SUCCESS: Attendance records last updated at: {get_last_updated('attendance')}")
+                set_last_updated('attendance')
+                print(f"SUCCESS: Attendance records last updated at: {get_last_updated('attendance')}")
                 return True
             except Exception as e:
                 print(f"ERROR: Failed to remove all records: {str(e)}")
@@ -380,7 +381,7 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
         valid_dates = []
         for date_str in dates_to_delete:
             try:
-                datetime.datetime.strptime(date_str, '%Y-%m-%d')
+                date_str = datetime.datetime.strptime(date_str, '%m/%d/%Y').strftime('%Y-%m-%d')
                 valid_dates.append(date_str.strip())
             except ValueError:
                 st.warning(f"Formato de fecha inválido: {date_str}. Se omitirá.")
@@ -401,6 +402,7 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
                 print(f"INFO: Removing data at path: {full_path}")
                 try:
                     db.child(full_path).remove()
+                    set_last_updated('attendance')
                     success = True
                 except Exception as e:
                     print(f"ERROR: Failed to remove date {date_str}: {str(e)}")
