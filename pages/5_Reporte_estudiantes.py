@@ -141,6 +141,12 @@ if df_loaded is not None and not df_loaded.empty:
     df_loaded['fecha_fin_modulo'] = df_loaded.apply(get_module_end_date, axis=1)
     df_loaded['Estado'] = df_loaded.apply(calculate_status, axis=1)
     
+    # Format date columns
+    if 'fecha_inicio' in df_loaded.columns:
+        df_loaded['fecha_inicio'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.strftime('%Y-%m-%d')
+    if 'fecha_fin_modulo' in df_loaded.columns:
+        df_loaded['fecha_fin_modulo'] = pd.to_datetime(df_loaded['fecha_fin_modulo']).dt.strftime('%Y-%m-%d')
+    
     # Now calculate statistics
     total_students = len(df_loaded)
     graduated = len(df_loaded[df_loaded['Estado'] == 'Graduado']) if 'Estado' in df_loaded.columns else 0
@@ -215,6 +221,11 @@ if df_loaded is not None and not df_loaded.empty:
                 "fecha_inicio": st.column_config.TextColumn(
                     "Fecha de Inicio",
                     help="Fecha de inicio del estudiante",
+                    width="small"
+                ),
+                "fecha_fin_modulo": st.column_config.TextColumn(
+                    "Fecha de Fin",
+                    help="Fecha de finalización del módulo actual",
                     width="small"
                 ),
             },

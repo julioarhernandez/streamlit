@@ -362,6 +362,7 @@ if user_email:
             "module_id": None,  # Hide module_id from display
             "firebase_key": None,  # Hide firebase_key from display but keep in data
         }
+
         
         # Convert date columns to datetime if they're not already
         date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
