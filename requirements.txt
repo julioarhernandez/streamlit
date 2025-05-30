@@ -1,0 +1,4 @@
+pyrebase4
+google-cloud-firestore
+gcloud
+setuptools
