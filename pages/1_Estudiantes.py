@@ -20,9 +20,38 @@ df_loaded, _ = load_students()
 if df_loaded is not None and not df_loaded.empty:
     st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
     st.divider()
+# --- Select Module ---
+st.subheader("1. Seleccionar Módulo")
 
+# Load available modules using the utility function
+try:
+    user_email = st.session_state.get('email', '').replace('.', ',')
+    module_options = get_available_modules(user_email)
+    
+    if module_options:
+        selected_module = st.selectbox(
+            "Seleccione un módulo para agregar a los nuevos estudiantes:",
+            options=module_options,
+            format_func=lambda x: x['label'],
+            index=0
+        )
+        
+        # Store selected module in session state for later use
+        if selected_module:
+            st.session_state.selected_module = selected_module
+            st.session_state.selected_module_id = selected_module['module_id']
+            st.session_state.selected_ciclo = selected_module['ciclo']
+    else:
+        st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
+        
+except Exception as e:
+    st.error(f"Error al cargar los módulos: {str(e)}")
 # Main UI
 # st.header("Gestionar Estudiantes") # st.title is usually sufficient for the main page title
+
+st.divider()
+
+st.subheader("2. Agregar Estudiantes")
 
 # Create tabs for different input methods
 tab1, tab2 = st.tabs(["📤 Subir Archivo", "✏️ Ingresar Texto"])
@@ -184,35 +213,6 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 
 st.divider()
 
-# --- Select Module ---
-st.subheader("Seleccionar Módulo")
-
-# Load available modules using the utility function
-try:
-    user_email = st.session_state.get('email', '').replace('.', ',')
-    module_options = get_available_modules(user_email)
-    
-    if module_options:
-        selected_module = st.selectbox(
-            "Seleccione un módulo para agregar a los nuevos estudiantes:",
-            options=module_options,
-            format_func=lambda x: x['label'],
-            index=0
-        )
-        
-        # Store selected module in session state for later use
-        if selected_module:
-            st.session_state.selected_module = selected_module
-            st.session_state.selected_module_id = selected_module['module_id']
-            st.session_state.selected_ciclo = selected_module['ciclo']
-    else:
-        st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
-        
-except Exception as e:
-    st.error(f"Error al cargar los módulos: {str(e)}")
-
-st.divider()
-
 # --- Display and Manage Current Students ---
 st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
 df_loaded, _ = load_students()
@@ -222,27 +222,29 @@ if df_loaded is not None and not df_loaded.empty:
         st.error("Los datos de los estudiantes no tienen la columna 'nombre', que es obligatoria.")
     else:
         df_display = df_loaded.copy()
-        if '🗑️' not in df_display.columns:
-            df_display.insert(0, '🗑️', False)
+        if 'Eliminar' not in df_display.columns:
+            df_display.insert(0, 'Eliminar', False)
         
-        disabled_columns = [col for col in df_loaded.columns if col != '🗑️']
+        disabled_columns = [col for col in df_loaded.columns if col != 'Eliminar']
 
         st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
         
         # Make a copy of the dataframe for editing
         editable_df = df_display.copy()
-        
+    
+
         # Display the editable table
         edited_df = st.data_editor(
             editable_df, 
             disabled=[],  # Make all columns editable
             hide_index=True,
             column_config={
-                "🗑️": st.column_config.CheckboxColumn(
-                    "🗑️",
+                "Eliminar": st.column_config.CheckboxColumn(
+                    "Eliminar",
                     help="Seleccione estudiantes para eliminar",
                     default=False,
-                    width="small"
+                    width="small",
+                    pinned=True
                 ),
                 "nombre": st.column_config.TextColumn(
                     "Nombre del Estudiante",
@@ -253,6 +255,7 @@ if df_loaded is not None and not df_loaded.empty:
             },
             key="students_editor"
         )
+
         
         # Add save button
         if st.button("💾 Guardar Cambios", key="save_changes_btn"):
@@ -278,7 +281,7 @@ if df_loaded is not None and not df_loaded.empty:
                     st.error("Error al guardar los cambios. Intente nuevamente.")
             else:
                 st.info("No se detectaron cambios para guardar.")
-        students_selected_for_deletion = edited_df[edited_df['🗑️'] == True]
+        students_selected_for_deletion = edited_df[edited_df['Eliminar'] == True]
 
         if not students_selected_for_deletion.empty:
             if st.button("Eliminar Estudiantes Seleccionados", type="primary"):
@@ -299,7 +302,7 @@ if df_loaded is not None and not df_loaded.empty:
                         st.rerun()
                     else:
                         st.error("Error al guardar los cambios después de intentar eliminar estudiantes.")
-        elif any(edited_df['🗑️']):
+        elif any(edited_df['Eliminar']):
              pass 
 
 elif df_loaded is not None and df_loaded.empty:

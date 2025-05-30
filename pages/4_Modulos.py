@@ -357,10 +357,10 @@ if user_email:
         
         # Configure columns for the editor
         column_config = {
+            "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar", pinned=True),
             **final_column_config,
             "module_id": None,  # Hide module_id from display
             "firebase_key": None,  # Hide firebase_key from display but keep in data
-            "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar")
         }
         
         # Convert date columns to datetime if they're not already
