@@ -31,20 +31,17 @@ if 'prepared_attendance_dfs' not in st.session_state:
 if 'processed_files_this_session' not in st.session_state:
     st.session_state.processed_files_this_session = set()
 
-# --- Helper Functions (extract_date_from_filename, parse_attendance_report) ---
-# def extract_date_from_filename(filename: str) -> datetime.date | None:
-#     match_keyword = re.search(r'Informe de Asistencia ', filename, re.IGNORECASE)
-#     if match_keyword:
-#         date_str_candidate = filename[match_keyword.end():]
-#         match_date = re.match(r'(\d{1,2})-(\d{1,2})-(\d{2})', date_str_candidate)
-#         if match_date:
-#             month, day, year_short = map(int, match_date.groups())
-#             year = 2000 + year_short
-#             try:
-#                 return datetime.date(year, month, day)
-#             except ValueError:
-#                 return None
-#     return None
+# Initialize dialog states
+if 'show_delete_all_dialog' not in st.session_state:
+    st.session_state.show_delete_all_dialog = False
+
+if 'show_delete_selected_dialog' not in st.session_state:
+    st.session_state.show_delete_selected_dialog = False
+
+if 'to_delete' not in st.session_state:
+    st.session_state.to_delete = []
+
+# --- Helper Functions ---
 def extract_date_from_filename(filename: str) -> datetime.date | None:
     # Define patterns to match
     patterns = [
@@ -125,6 +122,62 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
         st.error(f"Error analizando datos CSV de la sección 'Participantes' de '{filename_for_debug}': {e}")
         return []
 
+# --- Dialog Functions ---
+@st.dialog("Confirmar eliminación")
+def confirm_delete_selected_dialog():
+    count = len(st.session_state.to_delete)
+    st.write(
+        f"¿Está seguro que desea eliminar las {count} asistencias seleccionadas? "
+        "**Esta acción no se puede deshacer.**"
+    )
+    
+    col1, col2, _ = st.columns([3, 3, 3])
+    
+    with col1:
+        if st.button("✅ Sí, eliminar", type="primary"):
+            if delete_attendance_dates(st.session_state.to_delete):
+                st.session_state.uploader_key_suffix += 1
+                st.session_state.to_delete = []
+                st.session_state.show_delete_selected_dialog = False
+                st.success("Asistencias eliminadas exitosamente.")
+                st.rerun()
+            else:
+                st.error("Error al eliminar las asistencias seleccionadas.")
+    
+    with col2:
+        if st.button("❌ Cancelar"):
+            st.session_state.to_delete = []
+            st.session_state.show_delete_selected_dialog = False
+            st.rerun()
+
+@st.dialog("Confirmar eliminación total")
+def confirm_delete_all_dialog():
+    st.write(
+        "¿Está seguro que desea eliminar TODAS las asistencias? "
+        "**Esta acción no se puede deshacer.**"
+    )
+    
+    col1, col2, _ = st.columns([3, 3, 3])
+    
+    with col1:
+        if st.button("✅ Sí, eliminar todo", type="primary"):
+            if delete_attendance_dates(delete_all=True):
+                # Clear all relevant session state variables
+                st.session_state.current_batch_data_by_date = {}
+                st.session_state.prepared_attendance_dfs = {}
+                st.session_state.processed_files_this_session = set()
+                st.session_state.uploader_key_suffix += 1
+                st.session_state.show_delete_all_dialog = False
+                st.success("Todas las asistencias eliminadas exitosamente.")
+                st.rerun()
+            else:
+                st.error("Error al eliminar las asistencias.")
+    
+    with col2:
+        if st.button("❌ Cancelar"):
+            st.session_state.show_delete_all_dialog = False
+            st.rerun()
+
 # --- Main UI --- 
 st.header("Archivos de Asistencia guardados")
 
@@ -140,75 +193,49 @@ with st.expander("Ver lista de fechas"):
                 'Eliminar': [False] * len(all_attendance)
             })
             
+            # Move 'Eliminar' column to the first position
+            dates_df = dates_df[["Eliminar", "Fecha"]]
+            
             # Display the data editor
-            with st.form("attendance_dates_form"):
-                st.write("Seleccione las asistencias a eliminar:")
-                edited_df = st.data_editor(
-                    dates_df,
-                    column_config={
-                        "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
-                        "Eliminar": st.column_config.CheckboxColumn("Seleccionar para eliminar")
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
-                
-                # Add buttons for actions
-                col1, col2, _ = st.columns([3, 3,4])
-                with col1:
-                    delete_selected = st.form_submit_button("Eliminar seleccionados", type="secondary")
-                with col2:
-                    delete_all = st.form_submit_button("Eliminar todo", type="primary")
-                
-                if delete_selected:
-                    try:
-                        # It's good practice to ensure edited_df is what you expect
-                        if edited_df is not None:
-                            selected_rows = edited_df[edited_df['Eliminar']]
-                            if not selected_rows.empty:
-                                to_delete = selected_rows['Fecha'].tolist()
-                            else:
-                                to_delete = []
-                        else:
-                            to_delete = []
-                            st.error("Error interno: No se pudieron obtener los datos editados.")
-
-                        if to_delete: # Only proceed if to_delete is a non-empty list
-                            if delete_attendance_dates(to_delete): # This is the crucial call
-                                st.success(f"Se eliminaron {len(to_delete)} asistencias correctamente.")
-                                st.session_state.uploader_key_suffix += 1
-                                st.rerun()
-                            else:
-                                st.error("Error al eliminar las asistencias seleccionadas (la función de borrado informó un fallo).")
-                        else:
-                            # This handles both cases: nothing selected, or edited_df was None
-                            if edited_df is not None: # Only show warning if data editor was available
-                                st.warning("Por favor seleccione al menos una asistencia para eliminar. (La lista 'to_delete' estaba vacía).")
-                            
-                    except Exception as e_selected:
-                        st.error(f"Error crítico procesando la eliminación de seleccionados: {str(e_selected)}")
-
-
-                        
-                elif delete_all:
-                    if st.toggle("¿Está seguro que desea eliminar TODAS las asistencias?", key="confirm_delete_all"):
-                        if delete_attendance_dates(delete_all=True):
-                            # Clear all relevant session state variables
-                            uploaded_reports = []
-                            st.session_state.current_batch_data_by_date = {}
-                            st.session_state.prepared_attendance_dfs = {}
-                            st.session_state.processed_files_this_session = set()
-                            # Increment the uploader key suffix to force a new file uploader
-                            st.session_state.uploader_key_suffix += 1
-                            st.success("Todas las asistencias han sido eliminadas correctamente.")
-                            st.rerun()
-                        else:
-                            st.error("Error al eliminar las asistencias.")
+            st.write("Seleccione los ficheros de asistencia a eliminar:")
+            edited_df = st.data_editor(
+                dates_df,
+                column_config={
+                    "Eliminar": st.column_config.CheckboxColumn("Borrar", width="small", pinned=True),
+                    "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="attendance_dates_editor"
+            )
+            
+            # Show the delete buttons
+            col1, col2, _ = st.columns([2, 3, 5])
+            
+            with col1:
+                if st.button("Eliminar todo", type="primary"):
+                    st.session_state.show_delete_all_dialog = True
+                    st.rerun()
+            
+            with col2:
+                # Only show delete selected button if any rows are checked
+                if edited_df is not None and 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
+                    if st.button("Eliminar seleccionados", type="secondary"):
+                        st.session_state.to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
+                        st.session_state.show_delete_selected_dialog = True
+                        st.rerun()
         else:
             st.info("No hay asistencias registradas.")
         
     except Exception as e:
         st.error(f"Error al cargar las asistencias: {str(e)}")
+
+# Show dialogs if needed
+if st.session_state.show_delete_selected_dialog:
+    confirm_delete_selected_dialog()
+
+if st.session_state.show_delete_all_dialog:
+    confirm_delete_all_dialog()
 
 # --- Main UI --- 
 st.header("Subir Archivos de Informe de Asistencia")
@@ -282,11 +309,6 @@ if uploaded_reports:
                 col1.markdown("**Archivos:**")
                 for filename in filenames:
                     col2.write(f"📄 {filename}")
-    # if files_processed_summary:
-    #     st.markdown("**Archivos Procesados Exitosamente:**")
-    #     for date_obj, filenames in files_processed_summary.items():
-    #         attendee_count = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
-    #         st.write(f"- **{date_obj.strftime('%Y-%m-%d')}**: {len(filenames)} archivo(s) procesado(s), contribuyendo a {attendee_count} asistentes únicos para esta fecha.")
     
     if files_skipped_summary:
         st.markdown("**Archivos Omitidos:**")
