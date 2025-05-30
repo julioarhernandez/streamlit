@@ -91,7 +91,16 @@ def calculate_status(row):
     today = datetime.date.today()
     
     try:
-        # Check if student has a module end date
+        # Check if start date is in the future
+        if 'fecha_inicio' in row and pd.notna(row['fecha_inicio']):
+            try:
+                start_date = pd.to_datetime(row['fecha_inicio']).date()
+                if today < start_date:
+                    return "No iniciado"
+            except (ValueError, TypeError):
+                pass  # If date conversion fails, continue with normal status check
+        
+        # Check if student has graduated
         if 'fecha_fin_modulo' in row and pd.notna(row['fecha_fin_modulo']):
             try:
                 module_end_date = pd.to_datetime(row['fecha_fin_modulo']).date()
@@ -100,7 +109,7 @@ def calculate_status(row):
             except (ValueError, TypeError):
                 pass  # If date conversion fails, continue with normal status check
         
-        # If not graduated, check remaining modules
+        # If not graduated and has started, check remaining modules
         if remaining_str == '0':
             return "Último"
         elif remaining_str.isdigit() and int(remaining_str) > 0:
@@ -152,13 +161,14 @@ if df_loaded is not None and not df_loaded.empty:
     last_module = len(df_loaded[df_loaded['Estado'] == 'Último']) if 'Estado' in df_loaded.columns else 0
     
 
-    a, b, c, d, _ = st.columns([2,2,2,2,2])
+    a, b, c, d, e = st.columns([2,2,2,2,2])
 
     a.metric("Total", total_students, border=True)
     b.metric("En Curso", in_progress, border=True)
 
     c.metric("Último Módulo", last_module, border=True)
     d.metric("Graduados", graduated, border=True)
+    e.metric("No comenzado", total_students - in_progress - last_module - graduated, border=True)
 else:
     st.subheader("Estudiantes Actuales (Total: 0)")
 
@@ -186,13 +196,16 @@ if df_loaded is not None and not df_loaded.empty:
         
         # st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
         
-        # Make a copy of the dataframe for editing
-        editable_df = df_display.copy()
+        # Define the column order
+        column_order = ["nombre", "modulo", "fecha_inicio", "fecha_fin_modulo", "Módulos Restantes", "Estado"]
+        
+        # Make a copy of the dataframe with the desired column order
+        editable_df = df_display[column_order].copy()
         
         # Display the editable table
         edited_df = st.data_editor(
             editable_df, 
-            disabled=True,  # Make all columns editable
+            disabled=True,
             hide_index=True,
             column_config={
                 "nombre": st.column_config.TextColumn(
@@ -206,16 +219,6 @@ if df_loaded is not None and not df_loaded.empty:
                     help="Módulo del estudiante",
                     width="small"
                 ),
-                "Módulos Restantes": st.column_config.TextColumn(
-                    "Módulos Restantes",
-                    help="Módulos restantes para completar el curso",
-                    width="small"
-                ),
-                "Estado": st.column_config.TextColumn(
-                    "Estado",
-                    help="Estado del estudiante",
-                    width="small"
-                ),
                 "fecha_inicio": st.column_config.TextColumn(
                     "Fecha de Inicio",
                     help="Fecha de inicio del estudiante",
@@ -226,6 +229,16 @@ if df_loaded is not None and not df_loaded.empty:
                     help="Fecha de finalización del módulo actual",
                     width="small"
                 ),
+                "Módulos Restantes": st.column_config.TextColumn(
+                    "Restantes",
+                    help="Módulos restantes para completar el curso",
+                    width="small"
+                ),
+                "Estado": st.column_config.TextColumn(
+                    "Estado",
+                    help="Estado del estudiante",
+                    width="small"
+                )
             },
             key="students_editor"
         )
