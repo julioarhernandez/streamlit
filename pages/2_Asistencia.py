@@ -123,8 +123,19 @@ def parse_attendance_report(file_content_str: str, filename_for_debug: str) -> l
         return []
 
 # --- Dialog Functions ---
+def reset_dialog_states():
+    """Reset all dialog states to ensure only one can be open at a time"""
+    st.session_state.show_delete_all_dialog = False
+    st.session_state.show_delete_selected_dialog = False
+
 @st.dialog("Confirmar eliminación")
 def confirm_delete_selected_dialog():
+    if 'to_delete' not in st.session_state or not st.session_state.to_delete:
+        st.warning("No hay asistencias seleccionadas para eliminar.")
+        reset_dialog_states()
+        st.rerun()
+        return
+        
     count = len(st.session_state.to_delete)
     st.write(
         f"¿Está seguro que desea eliminar las {count} asistencias seleccionadas? "
@@ -135,19 +146,21 @@ def confirm_delete_selected_dialog():
     
     with col1:
         if st.button("✅ Sí, eliminar", type="primary"):
-            if delete_attendance_dates(st.session_state.to_delete):
-                st.session_state.uploader_key_suffix += 1
-                st.session_state.to_delete = []
-                st.session_state.show_delete_selected_dialog = False
-                st.success("Asistencias eliminadas exitosamente.")
-                st.rerun()
-            else:
-                st.error("Error al eliminar las asistencias seleccionadas.")
+            try:
+                if delete_attendance_dates(st.session_state.to_delete):
+                    st.session_state.uploader_key_suffix += 1
+                    st.session_state.to_delete = []
+                    reset_dialog_states()
+                    st.success("Asistencias eliminadas exitosamente.")
+                    st.rerun()
+                else:
+                    st.error("Error al eliminar las asistencias seleccionadas.")
+            except Exception as e:
+                st.error(f"Error inesperado al eliminar asistencias: {str(e)}")
     
     with col2:
         if st.button("❌ Cancelar"):
-            st.session_state.to_delete = []
-            st.session_state.show_delete_selected_dialog = False
+            reset_dialog_states()
             st.rerun()
 
 @st.dialog("Confirmar eliminación total")
@@ -161,21 +174,24 @@ def confirm_delete_all_dialog():
     
     with col1:
         if st.button("✅ Sí, eliminar todo", type="primary"):
-            if delete_attendance_dates(delete_all=True):
-                # Clear all relevant session state variables
-                st.session_state.current_batch_data_by_date = {}
-                st.session_state.prepared_attendance_dfs = {}
-                st.session_state.processed_files_this_session = set()
-                st.session_state.uploader_key_suffix += 1
-                st.session_state.show_delete_all_dialog = False
-                st.success("Todas las asistencias eliminadas exitosamente.")
-                st.rerun()
-            else:
-                st.error("Error al eliminar las asistencias.")
+            try:
+                if delete_attendance_dates(delete_all=True):
+                    # Clear all relevant session state variables
+                    st.session_state.current_batch_data_by_date = {}
+                    st.session_state.prepared_attendance_dfs = {}
+                    st.session_state.processed_files_this_session = set()
+                    st.session_state.uploader_key_suffix += 1
+                    reset_dialog_states()
+                    st.success("Todas las asistencias eliminadas exitosamente.")
+                    st.rerun()
+                else:
+                    st.error("Error al eliminar las asistencias.")
+            except Exception as e:
+                st.error(f"Error inesperado al eliminar las asistencias: {str(e)}")
     
     with col2:
         if st.button("❌ Cancelar"):
-            st.session_state.show_delete_all_dialog = False
+            reset_dialog_states()
             st.rerun()
 
 if get_attendance_dates():
@@ -214,14 +230,16 @@ if get_attendance_dates():
                 col1, col2, _ = st.columns([2, 3, 5])
                 
                 with col1:
-                    if st.button("Eliminar todo", type="primary"):
+                    if st.button("Eliminar todo", type="primary", key="delete_all_btn"):
+                        reset_dialog_states()  # Close any other open dialogs
                         st.session_state.show_delete_all_dialog = True
                         st.rerun()
                 
                 with col2:
                     # Only show delete selected button if any rows are checked
                     if edited_df is not None and 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
-                        if st.button("Eliminar seleccionados", type="secondary"):
+                        if st.button("Eliminar seleccionados", type="secondary", key="delete_selected_btn"):
+                            reset_dialog_states()  # Close any other open dialogs
                             st.session_state.to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
                             st.session_state.show_delete_selected_dialog = True
                             st.rerun()
@@ -231,11 +249,10 @@ if get_attendance_dates():
         except Exception as e:
             st.error(f"Error al cargar las asistencias: {str(e)}")
 
-    # Show dialogs if needed
+    # Show dialogs if needed - only one at a time
     if st.session_state.show_delete_selected_dialog:
         confirm_delete_selected_dialog()
-
-    if st.session_state.show_delete_all_dialog:
+    elif st.session_state.show_delete_all_dialog:
         confirm_delete_all_dialog()
 
 # --- Main UI --- 
