@@ -148,11 +148,11 @@ if df_loaded is not None and not df_loaded.empty:
     df_loaded['fecha_fin_modulo'] = df_loaded.apply(get_module_end_date, axis=1)
     df_loaded['Estado'] = df_loaded.apply(calculate_status, axis=1)
     
-    # Format date columns
+    # Convert date columns to datetime objects
     if 'fecha_inicio' in df_loaded.columns:
-        df_loaded['fecha_inicio'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.strftime('%Y-%m-%d')
+        df_loaded['fecha_inicio'] = pd.to_datetime(df_loaded['fecha_inicio'], errors='coerce')
     if 'fecha_fin_modulo' in df_loaded.columns:
-        df_loaded['fecha_fin_modulo'] = pd.to_datetime(df_loaded['fecha_fin_modulo']).dt.strftime('%Y-%m-%d')
+        df_loaded['fecha_fin_modulo'] = pd.to_datetime(df_loaded['fecha_fin_modulo'], errors='coerce')
     
     # Now calculate statistics
     total_students = len(df_loaded)
@@ -202,45 +202,28 @@ if df_loaded is not None and not df_loaded.empty:
         # Make a copy of the dataframe with the desired column order
         editable_df = df_display[column_order].copy()
         
-        # Display the editable table
-        edited_df = st.data_editor(
-            editable_df, 
-            disabled=True,
+        # Create a copy with date columns as strings for display
+        display_df = editable_df.copy()
+        
+        # Convert date columns to formatted strings for display
+        if 'fecha_inicio' in display_df.columns:
+            display_df['fecha_inicio'] = display_df['fecha_inicio'].dt.strftime('%m/%d/%Y')
+        if 'fecha_fin_modulo' in display_df.columns:
+            display_df['fecha_fin_modulo'] = display_df['fecha_fin_modulo'].dt.strftime('%m/%d/%Y')
+        
+        # Display the table (read-only)
+        st.dataframe(
+            display_df,
             hide_index=True,
             column_config={
-                "nombre": st.column_config.TextColumn(
-                    "Nombre del Estudiante",
-                    help="Edite el nombre del estudiante",
-                    width="medium",
-                    required=True
-                ),
-                "modulo": st.column_config.TextColumn(
-                    "Módulo de Inicio",
-                    help="Módulo del estudiante",
-                    width="small"
-                ),
-                "fecha_inicio": st.column_config.TextColumn(
-                    "Fecha de Inicio",
-                    help="Fecha de inicio del estudiante",
-                    width="small"
-                ),
-                "fecha_fin_modulo": st.column_config.TextColumn(
-                    "Fecha de Fin",
-                    help="Fecha de finalización del módulo actual",
-                    width="small"
-                ),
-                "Módulos Restantes": st.column_config.TextColumn(
-                    "Restantes",
-                    help="Módulos restantes para completar el curso",
-                    width="small"
-                ),
-                "Estado": st.column_config.TextColumn(
-                    "Estado",
-                    help="Estado del estudiante",
-                    width="small"
-                )
+                "nombre": "Nombre del Estudiante",
+                "modulo": "Módulo de Inicio",
+                "fecha_inicio": "Fecha de Inicio",
+                "fecha_fin_modulo": "Fecha de Fin",
+                "Módulos Restantes": "Restantes",
+                "Estado": "Estado"
             },
-            key="students_editor"
+            use_container_width=True
         )
     
 

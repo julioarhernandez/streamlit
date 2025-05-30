@@ -335,7 +335,7 @@ if df_loaded is not None and not df_loaded.empty:
                 "fecha_inicio": st.column_config.DateColumn(
                     "Fecha de Inicio",
                     help="Fecha de inicio en el módulo",
-                    format="DD/MM/YYYY",
+                    format="MM/DD/YYYY",
                     disabled=True,
                     width="small"
                 ),

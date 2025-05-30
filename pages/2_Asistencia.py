@@ -206,7 +206,7 @@ if get_attendance_dates():
             if all_attendance:
                 # Create a DataFrame with the dates and a delete column
                 dates_df = pd.DataFrame({
-                    'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%Y-%m-%d') for d in all_attendance],
+                    'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%m/%d/%Y') for d in all_attendance],
                     'Eliminar': [False] * len(all_attendance)
                 })
                 
@@ -322,7 +322,7 @@ if uploaded_reports:
         for date_obj, filenames in files_processed_summary.items():
             attendee_count = len(st.session_state.current_batch_data_by_date.get(date_obj, set()))
             
-            with st.expander(f"{date_obj.strftime('%Y-%m-%d')} — {len(filenames)} archivo(s), {attendee_count} asistentes únicos"):
+            with st.expander(f"{date_obj.strftime('%m/%d/%Y')} — {len(filenames)} archivo(s), {attendee_count} asistentes únicos"):
                 col1, col2 = st.columns([1, 3])
                 col1.markdown("**Archivos:**")
                 for filename in filenames:
@@ -385,10 +385,10 @@ if st.session_state.prepared_attendance_dfs:
         else:
             selected_date_str = st.selectbox(
                 "Seleccione una fecha para ver/editar asistencia:",
-                options=[d.strftime('%Y-%m-%d') for d in dates_with_data],
+                options=[d.strftime('%m/%d/%Y') for d in dates_with_data],
                 index=0
             )
-            selected_date_obj = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+            selected_date_obj = datetime.datetime.strptime(selected_date_str, '%m/%d/%Y').date()
 
             if selected_date_obj in st.session_state.prepared_attendance_dfs:
                 df_to_edit = st.session_state.prepared_attendance_dfs[selected_date_obj]
