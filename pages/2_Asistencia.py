@@ -415,7 +415,7 @@ if st.session_state.prepared_attendance_dfs:
                         else:
                             st.error(f"Error al guardar asistencia para {selected_date_str}.")
                 with col2:
-                    if st.button("🗑️ Limpiar Datos Cargados"):
+                    if st.button("🗑️ Limpiar Ficheros Cargados"):
                         st.session_state.current_batch_data_by_date = {}
                         st.session_state.prepared_attendance_dfs = {}
                         st.session_state.processed_files_this_session = set()
