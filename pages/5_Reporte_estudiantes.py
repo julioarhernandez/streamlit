@@ -4,7 +4,7 @@ import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import (
     load_students,
-    get_module_on_date, get_highest_module_credit
+    get_module_on_date, get_highest_module_credit, get_last_updated
 )
 
 # --- Login Check ---
@@ -15,7 +15,9 @@ if not st.session_state.get('logged_in', False):
 # --- End Login Check ---
 
 setup_page("Reporte de Estudiantes")
-df_loaded, _ = load_students()
+
+students_last_updated = get_last_updated('students')
+df_loaded, _ = load_students(students_last_updated)
 
 # Remove 'ciclo' column if it exists
 if df_loaded is not None and not df_loaded.empty and 'ciclo' in df_loaded.columns:
@@ -57,14 +59,16 @@ def calculate_remaining_modules(row):
             
         # Get the module for the student's start date
         start_date = pd.to_datetime(start_date_str).date()
-        student_module = get_module_on_date(user_email, start_date)
+        modules_last_updated = get_last_updated('modules')
+        student_module = get_module_on_date(user_email, start_date, modules_last_updated)
         
         if not student_module:
             return 'Módulo no encontrado'
             
         # Get the student's starting module credit
         student_credit = int(student_module['credits'])
-        max_credit = get_highest_module_credit(user_email)
+        modules_last_updated = get_last_updated('modules')
+        max_credit = get_highest_module_credit(user_email, modules_last_updated)
         
         print(f"Crédito del estudiante: {student_credit}, Máximo crédito: {max_credit}")
         
@@ -132,7 +136,8 @@ def get_module_end_date(row):
             
         start_date = pd.to_datetime(row['fecha_inicio']).date()
         user_email = st.session_state.get('email', '').replace('.', ',')
-        student_module = get_module_on_date(user_email, start_date)
+        modules_last_updated = get_last_updated('modules')
+        student_module = get_module_on_date(user_email, start_date, modules_last_updated)
         
         if student_module and 'end_date' in student_module:
             return student_module['end_date']
@@ -175,11 +180,13 @@ else:
 if df_loaded is not None and not df_loaded.empty:
     # Get highest module credit for the user
     user_email = st.session_state.get('email', '').replace('.', ',')
-    max_credit = get_highest_module_credit(user_email)
+    modules_last_updated = get_last_updated('modules')
+    max_credit = get_highest_module_credit(user_email, modules_last_updated)
     print(f"Max Credit: {max_credit}")
 
     # Get current module info (optional, but keeping it)
-    current_module = get_module_on_date(user_email)
+    modules_last_updated = get_last_updated('modules')
+    current_module = get_module_on_date(user_email, modules_last_updated)
     print(  f"Current Module: {current_module}")
     current_credit = int(current_module.get('credits', 0)) if current_module and 'credits' in current_module else 0
     print(f"Current Credit: {current_credit}")

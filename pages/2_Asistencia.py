@@ -5,7 +5,7 @@ import datetime
 import re
 import io
 import time
-from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates
+from utils import save_attendance, load_students, delete_attendance_dates, get_attendance_dates, get_last_updated
 from config import setup_page
 
 # --- Login Check ---
@@ -193,16 +193,15 @@ def confirm_delete_all_dialog():
         if st.button("❌ Cancelar"):
             reset_dialog_states()
             st.rerun()
-
-if get_attendance_dates():
+attendance_last_updated = get_last_updated('attendance')
+all_attendance = get_attendance_dates(attendance_last_updated)
+if all_attendance:
     # --- Main UI --- 
     st.header("Archivos de Asistencia guardados")
 
     with st.expander("Ver lista de fechas"):
         try:
-            # Get all attendance dates
-            all_attendance = get_attendance_dates()
-            
+            # Get all attendance dates            
             if all_attendance:
                 # Create a DataFrame with the dates and a delete column
                 dates_df = pd.DataFrame({
@@ -342,7 +341,8 @@ if st.session_state.current_batch_data_by_date:
     st.divider()
     st.subheader("Paso 2: Preparar Tablas de Asistencia")
     if st.button("Preparar Tablas de Asistencia para Edición"):
-        students_df, _ = load_students()
+        students_last_updated = get_last_updated('students')
+        students_df, _ = load_students(students_last_updated)
         if students_df is None or students_df.empty:
             st.error("No se encontraron datos de estudiantes. Por favor, suba una lista de estudiantes en la página 'Gestión de Estudiantes' primero.")
             st.stop()

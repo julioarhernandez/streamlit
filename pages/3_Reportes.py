@@ -53,7 +53,8 @@ with col2:
 
 try:
     # Get all attendance dates
-    all_attendance = get_attendance_dates()
+    attendance_last_updated = get_last_updated('attendance')
+    all_attendance = get_attendance_dates(attendance_last_updated)
     
     if all_attendance:
         st.caption("Asistencia(s) guardada(s):")
@@ -71,7 +72,8 @@ if start_date > end_date:
 else:
     if st.button("Generar Reporte", key="generate_report_btn", type="primary"): # Translated
         # 1. Load all students
-        all_students_df, _ = load_students()
+        students_last_updated = get_last_updated('students')
+        all_students_df, _ = load_students(students_last_updated)
         if all_students_df is None or all_students_df.empty:
             st.error("No se pudo cargar la lista de estudiantes. Por favor, registre estudiantes en la página 'Estudiantes'.") # Translated
             st.stop()
@@ -93,8 +95,9 @@ else:
                 if current_date_iter.weekday() >= 5: # 0=Monday, 1=Tuesday, ..., 5=Saturday, 6=Sunday
                     current_date_iter += datetime.timedelta(days=1)
                     continue # Skip to next day if it's a weekend
-                    
-                daily_attendance_dict = load_attendance(current_date_iter) # {name: {'status': 'Present', ...}}
+
+                attendance_last_updated = get_last_updated('attendance')
+                daily_attendance_dict = load_attendance(current_date_iter, attendance_last_updated) # {name: {'status': 'Present', ...}}
                 
                 present_today_count = 0
                 if daily_attendance_dict:
@@ -153,7 +156,8 @@ else:
             
             # Get student data with start dates
             try:
-                all_students_df, _ = load_students()
+                students_last_updated = get_last_updated('students')
+                all_students_df, _ = load_students(students_last_updated)
             except Exception as e:
                 st.error(f"Error loading student data: {str(e)}")
                 all_students_df = pd.DataFrame()

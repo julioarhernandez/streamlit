@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from config import setup_page
-from utils import save_students, load_students, get_available_modules
+from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated
 
 
 # --- Login Check ---
@@ -16,7 +16,11 @@ if not st.session_state.get('logged_in', False):
 setup_page("Gestión de Estudiantes")
 
 # Load current students to display count
-df_loaded, _ = load_students()
+
+# cache timestamp from database to prevent unnecessary reloads
+students_last_updated = get_last_updated('students')
+df_loaded, _ = load_students(students_last_updated)
+
 if df_loaded is not None and not df_loaded.empty:
     st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
     st.divider()
@@ -26,7 +30,8 @@ st.subheader("1. Seleccionar Módulo")
 # Load available modules using the utility function
 try:
     user_email = st.session_state.get('email', '').replace('.', ',')
-    module_options = get_available_modules(user_email)
+    modules_last_updated = get_last_updated('modules')
+    module_options = get_available_modules(user_email, modules_last_updated)
     
     if module_options:
         selected_module = st.selectbox(
@@ -144,6 +149,7 @@ if uploaded_file is not None:
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
                 if save_students(df_upload):
                     st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
+                    set_last_updated('students')
                     st.rerun()
     
     except Exception as e:
@@ -163,7 +169,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
         if not potential_new_names:
             st.warning("No se encontraron nombres de estudiantes válidos en el área de texto después del procesamiento.")
         else:
-            current_students_df, _ = load_students()
+            # current_students_df, _ = load_students
+            current_students_df = df_loaded
             if current_students_df is None:
                 # Initialize with all required and optional columns
                 current_students_df = pd.DataFrame(columns=[
@@ -263,6 +270,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
                 
                 if save_students(updated_students_df):
+                    set_last_updated('students')
                     st.success(f"¡{added_count} estudiante(s) agregado(s) exitosamente!")
                     if skipped_names:
                         st.caption(f"Nombres omitidos (ya existen o duplicados en la entrada): {', '.join(skipped_names)}")
@@ -274,7 +282,7 @@ st.divider()
 
 # --- Display and Manage Current Students ---
 st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
-df_loaded, _ = load_students()
+# df_loaded, _ = load_students()
 
 if df_loaded is not None and not df_loaded.empty:
     if 'nombre' not in df_loaded.columns:
@@ -369,6 +377,7 @@ if df_loaded is not None and not df_loaded.empty:
                 
                 # Save the updated dataframe
                 if save_students(updated_df):
+                    set_last_updated('students')
                     st.success("¡Cambios guardados exitosamente!")
                     # Add a button to refresh the page to see changes
                     if st.button("Actualizar página"):
@@ -383,7 +392,7 @@ if df_loaded is not None and not df_loaded.empty:
             if st.button("Eliminar Estudiantes Seleccionados", type="primary"):
                 names_to_delete = students_selected_for_deletion['nombre'].tolist()
                 
-                current_students_df_from_db, _ = load_students()
+                current_students_df_from_db = df_loaded
                 if current_students_df_from_db is None:
                     st.error("No se pudieron recargar los datos de los estudiantes para realizar la eliminación. Por favor, inténtelo de nuevo.")
                 else:
@@ -394,6 +403,7 @@ if df_loaded is not None and not df_loaded.empty:
                     ]
                     
                     if save_students(students_to_keep_df):
+                        set_last_updated('students')
                         st.success(f"¡{len(names_to_delete)} estudiante(s) eliminado(s) exitosamente!")
                         st.rerun()
                     else:

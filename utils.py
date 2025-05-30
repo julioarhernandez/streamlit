@@ -4,7 +4,41 @@ import pandas as pd
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
 import datetime # Added for type hinting and date operations
 
-def load_students():
+def get_last_updated(table_name):
+    """
+    Fetch the last_updated timestamp for a given table from Firebase metadata.
+    
+    Args:
+        table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+    
+    Returns:
+        str or None: The last_updated ISO timestamp, or None if not found.
+    """
+    metadata = db.child("metadata").child(table_name).get().val()
+    if metadata and 'last_updated' in metadata:
+        return metadata['last_updated']
+    else:
+        return None
+        
+def set_last_updated(table_name):
+    """
+    Update the last_updated timestamp for a given table in Firebase metadata to current UTC time.
+    
+    Args:
+        table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+    
+    Returns:
+        str: The new last_updated ISO timestamp.
+    """
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    db.child("metadata").child(table_name).update({
+        'last_updated': now_iso
+    })
+    return now_iso
+    
+
+@st.cache_data
+def load_students(students_last_updated):
     """
     Load students data from Firebase and ensure all required fields are present.
     
@@ -13,8 +47,12 @@ def load_students():
     """
     try:
         user_email = st.session_state.email.replace('.', ',')
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
         data = db.child("students").child(user_email).get().val()
-        
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---data from firebase----\n", data)
+
         if not data or 'data' not in data:
             return None, None
             
@@ -145,6 +183,7 @@ def save_students(students_df):
         try:
             db.child("students").child(user_email).set(data)
             st.success(f"Successfully saved {len(df)} student records.")
+            set_last_updated('students')
             return True
         except Exception as firebase_error:
             st.error(f"Firebase error: {str(firebase_error)}")
@@ -165,17 +204,24 @@ def save_attendance(date: datetime.date, attendance_data: dict):
         # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
         # For now, assuming they are simple strings.
         db.child("attendance").child(user_email).child(date_str).set(attendance_data)
+        set_last_updated('attendance')
         return True
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
 
-def load_attendance(date: datetime.date) -> dict:
+@st.cache_data
+def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
     """Load attendance data from Firebase for a specific date."""
     try:
         user_email = st.session_state.email.replace('.', ',')
         date_str = date.strftime('%Y-%m-%d')
         raw_data = db.child("attendance").child(user_email).child(date_str).get().val()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---load attendance data from firebase----\n", raw_data)
         
         if isinstance(raw_data, list):
             # Convert list of records to a dictionary keyed by student name
@@ -201,7 +247,8 @@ def load_attendance(date: datetime.date) -> dict:
 def delete_student(student_nombre_to_delete: str) -> bool:
     """Delete a student from the Firebase list by their 'nombre'."""
     try:
-        current_students_df, _ = load_students() # We don't need the filename here
+        students_last_updated = get_last_updated('students')
+        current_students_df, _ = load_students(students_last_updated) # We don't need the filename here
         if current_students_df is None:
             st.error("No students found to delete from.")
             return False
@@ -228,6 +275,7 @@ def delete_student(student_nombre_to_delete: str) -> bool:
         # Save the modified DataFrame (which overwrites the old list)
         if save_students(students_to_keep_df):
             st.success(f"Student '{student_nombre_to_delete}' deleted successfully.")
+            set_last_updated('students')
             return True
         else:
             # save_students would have shown an error
@@ -245,12 +293,14 @@ def save_attendance(date: datetime.date, attendance_data: list):
         # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
         # For now, assuming they are simple strings.
         db.child("attendance").child(user_email).child(date_str).set(attendance_data)
+        set_last_updated('attendance')
         return True
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")
         return False
 
-def get_attendance_dates():
+@st.cache_data
+def get_attendance_dates(attendance_last_updated: str):
     """
     Get a list of all dates with saved attendance records.
     Returns a sorted list of date strings in 'YYYY-MM-DD' format.
@@ -258,6 +308,12 @@ def get_attendance_dates():
     try:
         user_email = st.session_state.email.replace('.', ',')
         docs = db.child("attendance").child(user_email).get().val()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_attendance_dates-data from firebase----\n", docs)
+
         if not docs:
             return []
             
@@ -358,7 +414,6 @@ def delete_attendance_dates(dates_to_delete=None, delete_all=False):
         st.error(f"Error deleting attendance records: {str(e)}")
         print(f"EXCEPTION: {str(e)}")
         return False
-
 
 def format_date_for_display(date_value):
     """
@@ -477,8 +532,8 @@ def date_format(date_value, from_format, to_format='%m/%d/%Y'):
     except (ValueError, TypeError, AttributeError):
         return 'No especificada'
 
-
-def get_highest_module_credit(user_email: str) -> int:
+@st.cache_data
+def get_highest_module_credit(user_email: str, modules_last_updated: str) -> int:
     """
     Get the highest module credit/order number from all modules.
     
@@ -491,6 +546,11 @@ def get_highest_module_credit(user_email: str) -> int:
     try:
         # Create a fresh Firebase reference for this operation
         modules_ref = db.child("modules").child(user_email).get()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_highest_module_credit-data from firebase----\n", modules_ref.val())
         if not modules_ref.val():
             return 0
             
@@ -512,8 +572,8 @@ def get_highest_module_credit(user_email: str) -> int:
         st.error(f"Error al obtener el crédito máximo del módulo: {str(e)}")
         return 0
 
-
-def get_module_on_date(user_email: str, target_date: datetime.date = None) -> dict:
+@st.cache_data
+def get_module_on_date(user_email: str, target_date: datetime.date = None, modules_last_updated: str = None) -> dict:
     """
     Find a module that contains the specified date within any of its cycles.
     
@@ -538,6 +598,12 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None) -> di
     try:
         # Create a fresh Firebase reference for this operation
         modules_ref = db.child("modules").child(user_email).get()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_module_on_date-data from firebase----\n", modules_ref.val())
+
         if not modules_ref.val():
             return None
             
@@ -586,8 +652,8 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None) -> di
         st.error(f"Error al buscar módulo para la fecha: {str(e)}")
         return None
 
-
-def get_available_modules(user_email: str) -> list:
+@st.cache_data
+def get_available_modules(user_email: str, modules_last_updated: str) -> list:
     """
     Retrieve and process available modules for a user.
     
@@ -600,6 +666,12 @@ def get_available_modules(user_email: str) -> list:
     try:
         # Create a fresh Firebase reference for this operation
         modules_ref = db.child("modules").child(user_email).get()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_available_modules-data from firebase----\n", modules_ref.val())
+        
         if not modules_ref.val():
             return []
             
