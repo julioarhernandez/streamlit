@@ -65,28 +65,55 @@ with tab1:
     )
 
 with tab2:
-    st.subheader("Ingresar Nombres Manualmente")
+    st.subheader("Ingresar Datos Manualmente")
+    
+    # Text area for multiple student entries (one per line)
+    st.write("Ingrese los datos de los estudiantes en el siguiente formato:")
+    st.code("Nombre, Email, Canvas ID, Telefono", language="text")
+    
     students_text_area = st.text_area(
-        "Ingrese un nombre de estudiante por línea",
+        "Ingrese un estudiante por línea. Solo el nombre es obligatorio.",
         height=150,
-        key="text_area_input"
+        key="text_area_input",
+        placeholder="Ejemplo:\nJuan Pérez, juan@email.com,8780GOM , 786-123-4567\nAna García, ana@email.com, 9879PER, 786-123-4568\n..."
     )
-    submit_add_students_text = st.button("Agregar Estudiantes desde Texto")
+    submit_add_students_text = st.button("Agregar Estudiantes")
 
 if uploaded_file is not None:
     try:
-        df_upload = pd.read_csv(uploaded_file)
+        # Read the uploaded file
+        if uploaded_file.name.endswith('.csv'):
+            df_upload = pd.read_csv(uploaded_file)
+        else:  # Excel file
+            df_upload = pd.read_excel(uploaded_file)
     
+        # Normalize column names and handle case sensitivity
         df_upload.columns = df_upload.columns.str.lower().str.strip()
         
+        # Ensure required columns exist
         required_columns = {'nombre'}
         missing_columns = required_columns - set(df_upload.columns)
         
         if missing_columns:
             st.error(f"Error: El archivo subido no contiene las columnas requeridas: {', '.join(missing_columns)}. " 
-                    f"Por favor asegúrese de que su archivo incluya estas columnas: nombre")
+                    f"Por favor asegúrese de que su archivo incluya al menos la columna: nombre")
         else:
+            # Process required fields
             df_upload['nombre'] = df_upload['nombre'].astype(str).str.strip()
+            
+            # Initialize optional fields if they don't exist
+            optional_fields = {
+                'email': '',
+                'canvas_id': '',
+                'telefono': ''
+            }
+            
+            for field, default_value in optional_fields.items():
+                if field not in df_upload.columns:
+                    df_upload[field] = default_value
+                else:
+                    # Clean up the data
+                    df_upload[field] = df_upload[field].fillna('').astype(str).str.strip()
             
             # Get the selected module's details if available
             module_info = {}
@@ -138,17 +165,30 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
         else:
             current_students_df, _ = load_students()
             if current_students_df is None:
-                current_students_df = pd.DataFrame(columns=['nombre', 'fecha_inicio'])
-            
-            # Ensure required columns exist with proper types
-            if 'nombre' not in current_students_df.columns:
-                current_students_df['nombre'] = pd.Series(dtype='str')
-            else:
-                current_students_df['nombre'] = current_students_df['nombre'].astype(str)
+                # Initialize with all required and optional columns
+                current_students_df = pd.DataFrame(columns=[
+                    'nombre', 'email', 'canvas_id', 'telefono','fecha_inicio'
+                ])
                 
-            # Ensure fecha_inicio column exists
-            if 'fecha_inicio' not in current_students_df.columns:
-                current_students_df['fecha_inicio'] = pd.NaT
+                # Ensure all columns exist with proper types
+                column_types = {
+                    'nombre': str,
+                    'email': str,
+                    'canvas_id': str,
+                    'telefono': str,
+                    'fecha_inicio': 'datetime64[ns]',
+                    'modulo': str,
+                    'ciclo': str
+                }
+                
+                for col, dtype in column_types.items():
+                    if col not in current_students_df.columns:
+                        if dtype == str:
+                            current_students_df[col] = ''
+                        else:
+                            current_students_df[col] = pd.Series(dtype=dtype)
+                    else:
+                        current_students_df[col] = current_students_df[col].astype(dtype) if dtype != str else current_students_df[col].fillna('').astype(str)
 
             existing_normalized_names = set(current_students_df['nombre'].str.lower().str.strip())
             
@@ -180,16 +220,35 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     except (ValueError, TypeError):
                         module_info = {}  # Reset if date conversion fails
 
-            for name in unique_potential_new_names:
+            for student_entry in unique_potential_new_names:
+                # Split the line into components (name, email, phone, canvas_id)
+                parts = [p.strip() for p in student_entry.split(',', 3)]
+                name = parts[0] if len(parts) > 0 else ''
+                email = parts[1] if len(parts) > 1 else ''
+                canvas_id = parts[2] if len(parts) > 2 else ''
+                telefono = parts[3] if len(parts) > 3 else ''
+                
+                
+                if not name:  # Skip empty names
+                    continue
+                    
                 normalized_name = name.lower().strip()
+                
                 if normalized_name not in existing_normalized_names:
-                    student_data = {'nombre': name}
+                    student_data = {
+                        'nombre': name,
+                        'email': email,
+                        'canvas_id': canvas_id,
+                        'telefono': telefono
+                    }
+                    
                     if module_info.get('fecha_inicio'):
                         student_data.update({
                             'fecha_inicio': module_info['fecha_inicio'],
                             'modulo': module_info['modulo'],
                             'ciclo': module_info['ciclo']
                         })
+                        
                     students_to_add_list.append(student_data)
                     added_count += 1
                 else:
@@ -235,43 +294,62 @@ if df_loaded is not None and not df_loaded.empty:
         editable_df = df_display[column_order].copy()
     
 
-        # Display the editable table
+        # Display the editable table with all fields
         edited_df = st.data_editor(
-            editable_df, 
-            disabled=[],  # Make all columns editable
-            hide_index=True,
+            editable_df,
             column_config={
                 "Eliminar": st.column_config.CheckboxColumn(
                     "Borrar",
                     help="Seleccione estudiantes para eliminar",
                     default=False,
                     width="small",
-                    pinned=True
+                    required=True
                 ),
                 "nombre": st.column_config.TextColumn(
                     "Nombre del Estudiante",
-                    help="Edite el nombre del estudiante",
-                    width="medium",
-                    required=True
+                    help="Nombre completo del estudiante",
+                    required=True,
+                    width="medium"
+                ),
+                "email": st.column_config.TextColumn(
+                    "Correo Electrónico",
+                    help="Correo electrónico del estudiante",
+                    width="medium"
+                ),
+                "canvas_id": st.column_config.TextColumn(
+                    "ID de Canvas",
+                    help="ID del estudiante en Canvas",
+                    width="small"
+                ),
+                "telefono": st.column_config.TextColumn(
+                    "Teléfono",
+                    help="Número de teléfono",
+                    width="small"
                 ),
                 "modulo": st.column_config.TextColumn(
-                    "Inició en",
-                    help="Módulo en el que inició el estudiante",
-                    width="small"
+                    "Módulo",
+                    help="Módulo actual del estudiante",
+                    disabled=True,
+                    width="medium"
                 ),
-                "fecha_inicio": st.column_config.TextColumn(
+                "fecha_inicio": st.column_config.DateColumn(
                     "Fecha de Inicio",
-                    help="Fecha de inicio del estudiante (formato: YYYY-MM-DD)",
+                    help="Fecha de inicio en el módulo",
+                    format="DD/MM/YYYY",
+                    disabled=True,
                     width="small"
                 ),
-                "ciclo": st.column_config.NumberColumn(
+                "ciclo": st.column_config.TextColumn(
                     "Ciclo",
-                    help="Ciclo del estudiante (número entero)",
-                    width="small",
-                    format="%d"  # Display as integer
+                    help="Ciclo actual del estudiante",
+                    disabled=True,
+                    width="small"
                 )
             },
-            key="students_editor"
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic",
+            key=f"students_editor_{st.session_state.get('editor_key', 0)}"
         )
 
         

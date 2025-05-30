@@ -5,64 +5,155 @@ from config import db # Assuming db is your Firebase Realtime Database reference
 import datetime # Added for type hinting and date operations
 
 def load_students():
-    """Load students data from Firebase"""
+    """
+    Load students data from Firebase and ensure all required fields are present.
+    
+    Returns:
+        tuple: (DataFrame with student data, filename) or (None, None) if error or no data
+    """
     try:
         user_email = st.session_state.email.replace('.', ',')
         data = db.child("students").child(user_email).get().val()
-        if data and 'data' in data:
-            df = pd.DataFrame(data['data'])
-            # Normalize column names
-            df.columns = df.columns.str.lower().str.strip() # Added strip here too
-            # Ensure 'id' column is string and other required columns are present and stripped
-            if 'nombre' in df.columns: # Assuming 'nombre' is the primary identifier now
-                df['nombre'] = df['nombre'].astype(str).str.strip()
-            # Add similar cleaning for other columns if they become critical again
-            return df, data.get('filename', 'students.xlsx')
-        return None, None
+        
+        if not data or 'data' not in data:
+            return None, None
+            
+        # Create DataFrame from records
+        df = pd.DataFrame(data['data'])
+        
+        # Normalize column names
+        df.columns = df.columns.str.lower().str.strip()
+        
+        # Ensure required columns exist
+        if 'nombre' not in df.columns:
+            st.error("Error: El archivo debe contener una columna 'nombre'")
+            return None, None
+            
+        # Clean and standardize data
+        df['nombre'] = df['nombre'].astype(str).str.strip()
+        
+        # Initialize optional fields if they don't exist
+        optional_fields = {
+            'email': '',
+            'canvas_id': '',
+            'telefono': '',
+            'modulo': '',
+            'ciclo': '',
+            'fecha_inicio': None
+        }
+        
+        for field, default_value in optional_fields.items():
+            if field not in df.columns:
+                df[field] = default_value
+            else:
+                # Clean up the data
+                if field == 'fecha_inicio' and pd.api.types.is_datetime64_any_dtype(df[field]):
+                    # Convert datetime to string for consistency
+                    df[field] = pd.to_datetime(df[field]).dt.strftime('%Y-%m-%d')
+                else:
+                    df[field] = df[field].fillna(default_value if default_value is not None else '').astype(str).str.strip()
+        
+        # Reorder columns for consistency
+        column_order = ['nombre', 'email', 'canvas_id', 'telefono', 'modulo', 'fecha_inicio', 'ciclo']
+        df = df[[col for col in column_order if col in df.columns] + 
+                [col for col in df.columns if col not in column_order]]
+        
+        return df, data.get('filename', 'students.xlsx')
+        
     except Exception as e:
         st.error(f"Error loading students: {str(e)}")
         return None, None
 
 def save_students(students_df):
-    """Save students data to Firebase"""
+    """
+    Save students data to Firebase with proper handling of all fields.
+    
+    Args:
+        students_df (DataFrame): DataFrame containing student records
+        
+    Returns:
+        bool: True if save was successful, False otherwise
+    """
     try:
+        if students_df is None or students_df.empty:
+            st.warning("No student data to save.")
+            return False
+            
         user_email = st.session_state.email.replace('.', ',')
-        # Create a copy of the dataframe to avoid modifying the original
+        
+        # Create a working copy to avoid modifying the original
         df = students_df.copy()
         
-        # Ensure all data is JSON-serializable
+        # Ensure required columns exist
+        if 'nombre' not in df.columns:
+            st.error("Error: Student data must contain a 'nombre' column")
+            return False
+            
+        # Initialize optional fields if they don't exist
+        optional_fields = {
+            'email': '',
+            'canvas_id': '',
+            'telefono': '',
+            'modulo': '',
+            'ciclo': '',
+            'fecha_inicio': None
+        }
+        
+        for field, default_value in optional_fields.items():
+            if field not in df.columns:
+                df[field] = default_value
+        
+        # Clean and standardize data
+        df['nombre'] = df['nombre'].astype(str).str.strip()
+        
+        # Convert data types and ensure JSON serialization
         for col in df.columns:
-            # Convert any numpy types to native Python types
-            if df[col].dtype.kind in ['i', 'u', 'f', 'b']:  # numeric types
+            # Handle numeric types
+            if pd.api.types.is_numeric_dtype(df[col]):
                 df[col] = df[col].astype('object').where(df[col].notna(), None)
-            # Convert datetime to string
-            elif df[col].dtype.kind == 'M':  # datetime
-                df[col] = df[col].dt.strftime('%Y-%m-%d')
+            # Handle datetime types
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d')
+            # Handle string types
+            else:
+                df[col] = df[col].fillna('').astype(str).str.strip()
         
-        # Convert to dictionary with records orientation
-        records = df.to_dict('records')
-        
-        # Ensure all values in records are JSON-serializable
-        for record in records:
-            for key, value in record.items():
-                if pd.isna(value) or value is None:
+        # Convert to records and ensure all values are JSON-serializable
+        records = []
+        for _, row in df.iterrows():
+            record = {}
+            for key, value in row.items():
+                if pd.isna(value) or value is None or value == '':
                     record[key] = None
-                elif isinstance(value, (int, float, bool, str)):
-                    continue  # These are already JSON-serializable
                 else:
-                    record[key] = str(value)  # Convert any remaining types to string
+                    record[key] = str(value) if not isinstance(value, (int, float, bool, str)) else value
+            records.append(record)
         
+        # Prepare data for Firebase
         data = {
             'filename': 'students.xlsx',
             'data': records,
-            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'  # ISO format with timezone
+            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+            'metadata': {
+                'version': '1.0',
+                'fields': list(df.columns),
+                'record_count': len(df)
+            }
         }
         
-        # Save to Firebase
-        db.child("students").child(user_email).set(data)
-        return True
+        # Save to Firebase with error handling
+        try:
+            db.child("students").child(user_email).set(data)
+            st.success(f"Successfully saved {len(df)} student records.")
+            return True
+        except Exception as firebase_error:
+            st.error(f"Firebase error: {str(firebase_error)}")
+            return False
+            
     except Exception as e:
         st.error(f"Error saving students: {str(e)}")
+        if 'df' in locals():
+            st.error(f"Columns in DataFrame: {', '.join(df.columns)}")
         return False
 
 # --- Functions moved from 2_Attendance.py ---
