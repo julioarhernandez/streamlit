@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time
 import math
 import uuid # For generating unique module IDs
 from config import setup_page, db # Assuming db is initialized in config.py
@@ -395,16 +396,129 @@ if user_email:
                 st.session_state.ids_to_delete = keys_to_delete_detected
                 st.rerun() # Rerun to display the confirmation dialog below
         
-        # Handle module deletion confirmation
-        if st.session_state.ids_to_delete:
-            # Create a form to handle the confirmation/cancellation
-            with st.form("delete_confirmation_form"):
-                st.warning(f"Está a punto de eliminar {len(st.session_state.ids_to_delete)} módulo(s) seleccionados en la tabla. Esta acción no se puede deshecer. ¿Está seguro?")
+        # Initialize session state flags
+        if 'show_delete_dialog' not in st.session_state:
+            st.session_state.show_delete_dialog = False
+
+        if 'ids_to_delete' not in st.session_state:
+            st.session_state.ids_to_delete = set()
+
+        col1, col2, _ = st.columns([2.5, 3.3, 4])
+        with col1:     
+            # Button to save changes to Firebase
+            if st.button("💾 Guardar Cambios"):
+                # --- Start of modification ---
+                # Check if a deletion confirmation is pending
+                if st.session_state.ids_to_delete:
+                    st.warning("Por favor, primero confirme o cancele la eliminación pendiente de módulos (ver mensaje de advertencia arriba).")
+                    st.stop() # Prevent saving other edits while deletion is pending
+                # --- End of modification ---
+
+                # Proceed with saving edits if no deletions are pending
+                # The edited_df should reflect the current state of the table.
+                # Rows removed in UI are gone from it; actual DB deletion is handled by the confirmation dialog.
+                modules_to_save = edited_df.to_dict('records')
                 
-                col1, col2 = st.columns(2)
+                success_count = 0
+                error_count = 0
+                
+                # Get original module IDs for comparison
+                original_module_ids = set(modules_df_from_db['module_id'].dropna().tolist()) if 'module_id' in modules_df_from_db.columns else set()
+                
+                # (The rest of your existing saving logic for edits and new modules follows here)
+                # Ensure this part correctly handles new rows (which won't have a module_id from original_module_ids)
+                # and edited rows.
+                with st.spinner('Guardando cambios...'):
+                    for module in modules_to_save:
+                        try:
+                            # Prepare module data for Firebase
+                            def convert_date_to_iso(date_val):
+                                if pd.isna(date_val):
+                                    return ''
+                                if isinstance(date_val, (datetime.date, datetime.datetime)):
+                                    return date_val.isoformat()
+                                return str(date_val) if date_val is not None else ''
+                            
+                            def clean_value(val):
+                                if pd.isna(val):
+                                    return None
+                                if isinstance(val, (int, float)) and math.isnan(val):
+                                    return None
+                                return val
+                                
+                            module_data = {
+                                'name': str(module.get('name', '')),
+                                'description': str(module.get('description', '')),
+                                'credits': int(module.get('credits', 0)) if not pd.isna(module.get('credits')) else 0,
+                                'duration_weeks': int(module.get('duration_weeks', 1)) if not pd.isna(module.get('duration_weeks')) else 1,
+                                'ciclo1_inicio': convert_date_to_iso(module.get('ciclo1_inicio')),
+                                'ciclo1_fin': convert_date_to_iso(module.get('ciclo1_fin')),
+                                'ciclo2_inicio': convert_date_to_iso(module.get('ciclo2_inicio')),
+                                'ciclo2_fin': convert_date_to_iso(module.get('ciclo2_fin')),
+                                'updated_at': datetime.datetime.now().isoformat()
+                            }
+                            
+                            # Remove None values as they can cause issues with Firebase
+                            module_data = {k: v for k, v in module_data.items() if v is not None}
+                            
+                            # Get the sanitized user email path
+                            user_path = user_email.replace('.', ',')
+                            
+                            # Check if this is a new or existing module using firebase_key
+                            firebase_key = module.get('firebase_key')
+                            if firebase_key and firebase_key in original_module_keys:
+                                try:
+                                    # Update existing module using firebase_key
+                                    db.child("modules").child(user_path).child(firebase_key).update(module_data)
+                                    success_count += 1
+                                except Exception as e:
+                                    st.error(f"Error updating module {module.get('name', '')} (firebase_key: {firebase_key}): {str(e)}")
+                                    error_count += 1
+                            else:
+                                try:
+                                    # Add new module
+                                    module_id = str(uuid.uuid4())
+                                    module_data['created_at'] = datetime.datetime.now().isoformat()
+                                    module_data['module_id'] = module_id
+                                    db.child("modules").child(user_path).child(module_id).set(module_data)
+                                    success_count += 1
+                                except Exception as e:
+                                    st.error(f"Error creating module {module.get('name', '')}: {str(e)}")
+                                    error_count += 1
+                            
+                        except Exception as e:
+                            st.error(f"Error al guardar el módulo {module.get('name', '')}: {str(e)}")
+                            error_count += 1
+                
+                # Show success/error message
+                if error_count == 0:
+                    st.success(f"¡Se guardaron exitosamente {success_count} módulos!")
+                    st.rerun()  # Refresh the data
+                else:
+                    st.warning(f"Se guardaron {success_count} módulos con éxito, pero hubo {error_count} errores.")
+        with col2:
+            # Only show delete button if there are checked items in the current editor
+            if 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
+                if st.button("❌ Eliminar seleccionados"):
+                    # Update the ids_to_delete with currently checked items
+                    rows_to_delete = edited_df[edited_df['Eliminar'] == True]
+                    if not rows_to_delete.empty:
+                        st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
+                    st.session_state.show_delete_dialog = True
+                    st.rerun()
+
+            # Define the delete confirmation dialog
+            @st.dialog("Confirmar eliminación")
+            def confirm_delete_dialog():
+                st.write(
+                    f"¿Está seguro que desea eliminar {len(st.session_state.ids_to_delete)} módulo(s) seleccionados? "
+                    "**Esta acción no se puede deshacer.**"
+                )
+                
+                col1, col2, _ = st.columns([3, 3, 3])
                 
                 with col1:
-                    if st.form_submit_button("Sí, eliminar módulo(s)"):
+                    if st.button("✅ Sí, eliminar", type="primary"):
                         ids_to_process_deletion = list(st.session_state.ids_to_delete)
                         deleted_count = 0
                         
@@ -416,108 +530,22 @@ if user_email:
                         if deleted_count > 0:
                             st.success(f"Se eliminaron {deleted_count} módulo(s) correctamente.")
                         
+                        # Reset state
                         st.session_state.ids_to_delete = set()
+                        st.session_state.show_delete_dialog = False
+                        time.sleep(1)
                         st.rerun()
                 
                 with col2:
-                    if st.form_submit_button("Cancelar eliminación"):
+                    if st.button("Cancelar"):
                         st.session_state.ids_to_delete = set()
+                        st.session_state.show_delete_dialog = False
                         st.rerun()
-            
-            # Stop further execution until deletion is confirmed or cancelled
-            st.stop()
-        
-        # Button to save changes to Firebase
-        if st.button("Guardar Cambios en Módulos"):
-            # --- Start of modification ---
-            # Check if a deletion confirmation is pending
-            if st.session_state.ids_to_delete:
-                st.warning("Por favor, primero confirme o cancele la eliminación pendiente de módulos (ver mensaje de advertencia arriba).")
-                st.stop() # Prevent saving other edits while deletion is pending
-            # --- End of modification ---
+                        # No rerun — just closes dialog
 
-            # Proceed with saving edits if no deletions are pending
-            # The edited_df should reflect the current state of the table.
-            # Rows removed in UI are gone from it; actual DB deletion is handled by the confirmation dialog.
-            modules_to_save = edited_df.to_dict('records')
+            # Show the dialog if the flag is set
+            if st.session_state.show_delete_dialog:
+                confirm_delete_dialog()
             
-            success_count = 0
-            error_count = 0
-            
-            # Get original module IDs for comparison
-            original_module_ids = set(modules_df_from_db['module_id'].dropna().tolist()) if 'module_id' in modules_df_from_db.columns else set()
-            
-            # (The rest of your existing saving logic for edits and new modules follows here)
-            # Ensure this part correctly handles new rows (which won't have a module_id from original_module_ids)
-            # and edited rows.
-            with st.spinner('Guardando cambios...'):
-                for module in modules_to_save:
-                    try:
-                        # Prepare module data for Firebase
-                        def convert_date_to_iso(date_val):
-                            if pd.isna(date_val):
-                                return ''
-                            if isinstance(date_val, (datetime.date, datetime.datetime)):
-                                return date_val.isoformat()
-                            return str(date_val) if date_val is not None else ''
-                        
-                        def clean_value(val):
-                            if pd.isna(val):
-                                return None
-                            if isinstance(val, (int, float)) and math.isnan(val):
-                                return None
-                            return val
-                            
-                        module_data = {
-                            'name': str(module.get('name', '')),
-                            'description': str(module.get('description', '')),
-                            'credits': int(module.get('credits', 0)) if not pd.isna(module.get('credits')) else 0,
-                            'duration_weeks': int(module.get('duration_weeks', 1)) if not pd.isna(module.get('duration_weeks')) else 1,
-                            'ciclo1_inicio': convert_date_to_iso(module.get('ciclo1_inicio')),
-                            'ciclo1_fin': convert_date_to_iso(module.get('ciclo1_fin')),
-                            'ciclo2_inicio': convert_date_to_iso(module.get('ciclo2_inicio')),
-                            'ciclo2_fin': convert_date_to_iso(module.get('ciclo2_fin')),
-                            'updated_at': datetime.datetime.now().isoformat()
-                        }
-                        
-                        # Remove None values as they can cause issues with Firebase
-                        module_data = {k: v for k, v in module_data.items() if v is not None}
-                        
-                        # Get the sanitized user email path
-                        user_path = user_email.replace('.', ',')
-                        
-                        # Check if this is a new or existing module using firebase_key
-                        firebase_key = module.get('firebase_key')
-                        if firebase_key and firebase_key in original_module_keys:
-                            try:
-                                # Update existing module using firebase_key
-                                db.child("modules").child(user_path).child(firebase_key).update(module_data)
-                                success_count += 1
-                            except Exception as e:
-                                st.error(f"Error updating module {module.get('name', '')} (firebase_key: {firebase_key}): {str(e)}")
-                                error_count += 1
-                        else:
-                            try:
-                                # Add new module
-                                module_id = str(uuid.uuid4())
-                                module_data['created_at'] = datetime.datetime.now().isoformat()
-                                module_data['module_id'] = module_id
-                                db.child("modules").child(user_path).child(module_id).set(module_data)
-                                success_count += 1
-                            except Exception as e:
-                                st.error(f"Error creating module {module.get('name', '')}: {str(e)}")
-                                error_count += 1
-                        
-                    except Exception as e:
-                        st.error(f"Error al guardar el módulo {module.get('name', '')}: {str(e)}")
-                        error_count += 1
-            
-            # Show success/error message
-            if error_count == 0:
-                st.success(f"¡Se guardaron exitosamente {success_count} módulos!")
-                st.rerun()  # Refresh the data
-            else:
-                st.warning(f"Se guardaron {success_count} módulos con éxito, pero hubo {error_count} errores.")
-
 else:
     st.error("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")
