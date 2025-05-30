@@ -157,7 +157,7 @@ def confirm_delete_all_dialog():
         "**Esta acción no se puede deshacer.**"
     )
     
-    col1, col2, _ = st.columns([3, 3, 3])
+    col1, col2, _ = st.columns([4, 3, 3])
     
     with col1:
         if st.button("✅ Sí, eliminar todo", type="primary"):
@@ -178,64 +178,65 @@ def confirm_delete_all_dialog():
             st.session_state.show_delete_all_dialog = False
             st.rerun()
 
-# --- Main UI --- 
-st.header("Archivos de Asistencia guardados")
+if get_attendance_dates():
+    # --- Main UI --- 
+    st.header("Archivos de Asistencia guardados")
 
-with st.expander("Ver lista de fechas"):
-    try:
-        # Get all attendance dates
-        all_attendance = get_attendance_dates()
-        
-        if all_attendance:
-            # Create a DataFrame with the dates and a delete column
-            dates_df = pd.DataFrame({
-                'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%Y-%m-%d') for d in all_attendance],
-                'Eliminar': [False] * len(all_attendance)
-            })
+    with st.expander("Ver lista de fechas"):
+        try:
+            # Get all attendance dates
+            all_attendance = get_attendance_dates()
             
-            # Move 'Eliminar' column to the first position
-            dates_df = dates_df[["Eliminar", "Fecha"]]
-            
-            # Display the data editor
-            st.write("Seleccione los ficheros de asistencia a eliminar:")
-            edited_df = st.data_editor(
-                dates_df,
-                column_config={
-                    "Eliminar": st.column_config.CheckboxColumn("Borrar", width="small", pinned=True),
-                    "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="attendance_dates_editor"
-            )
-            
-            # Show the delete buttons
-            col1, col2, _ = st.columns([2, 3, 5])
-            
-            with col1:
-                if st.button("Eliminar todo", type="primary"):
-                    st.session_state.show_delete_all_dialog = True
-                    st.rerun()
-            
-            with col2:
-                # Only show delete selected button if any rows are checked
-                if edited_df is not None and 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
-                    if st.button("Eliminar seleccionados", type="secondary"):
-                        st.session_state.to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
-                        st.session_state.show_delete_selected_dialog = True
+            if all_attendance:
+                # Create a DataFrame with the dates and a delete column
+                dates_df = pd.DataFrame({
+                    'Fecha': [datetime.datetime.strptime(d, '%Y-%m-%d').strftime('%Y-%m-%d') for d in all_attendance],
+                    'Eliminar': [False] * len(all_attendance)
+                })
+                
+                # Move 'Eliminar' column to the first position
+                dates_df = dates_df[["Eliminar", "Fecha"]]
+                
+                # Display the data editor
+                st.write("Seleccione los ficheros de asistencia a eliminar:")
+                edited_df = st.data_editor(
+                    dates_df,
+                    column_config={
+                        "Eliminar": st.column_config.CheckboxColumn("Borrar", width="small", pinned=True),
+                        "Fecha": st.column_config.TextColumn("Fecha", disabled=True),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="attendance_dates_editor"
+                )
+                
+                # Show the delete buttons
+                col1, col2, _ = st.columns([2, 3, 5])
+                
+                with col1:
+                    if st.button("Eliminar todo", type="primary"):
+                        st.session_state.show_delete_all_dialog = True
                         st.rerun()
-        else:
-            st.info("No hay asistencias registradas.")
-        
-    except Exception as e:
-        st.error(f"Error al cargar las asistencias: {str(e)}")
+                
+                with col2:
+                    # Only show delete selected button if any rows are checked
+                    if edited_df is not None and 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
+                        if st.button("Eliminar seleccionados", type="secondary"):
+                            st.session_state.to_delete = edited_df[edited_df['Eliminar']]['Fecha'].tolist()
+                            st.session_state.show_delete_selected_dialog = True
+                            st.rerun()
+            else:
+                st.info("No hay asistencias registradas.")
+            
+        except Exception as e:
+            st.error(f"Error al cargar las asistencias: {str(e)}")
 
-# Show dialogs if needed
-if st.session_state.show_delete_selected_dialog:
-    confirm_delete_selected_dialog()
+    # Show dialogs if needed
+    if st.session_state.show_delete_selected_dialog:
+        confirm_delete_selected_dialog()
 
-if st.session_state.show_delete_all_dialog:
-    confirm_delete_all_dialog()
+    if st.session_state.show_delete_all_dialog:
+        confirm_delete_all_dialog()
 
 # --- Main UI --- 
 st.header("Subir Archivos de Informe de Asistencia")
