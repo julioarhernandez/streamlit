@@ -53,7 +53,7 @@ def logout_user():
 
 # --- Page Logic ---
 if not st.session_state.logged_in:
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+
     st.markdown("<h2 style='text-align: center;'>Iniciar Sesión</h2>", unsafe_allow_html=True)
     
     with st.form("login_form"):
