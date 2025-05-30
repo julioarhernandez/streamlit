@@ -1,16 +1,20 @@
 import streamlit as st
 import pyrebase
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Firebase configuration
 firebaseConfig = {
-    "apiKey": "AIzaSyCjB9UI5Soj6dHlbzCnrbBuzIfeWKEPMvw",
-    "databaseURL": "https://attendance-bfa78-default-rtdb.firebaseio.com",
-    "authDomain": "attendance-bfa78.firebaseapp.com",
-    "projectId": "attendance-bfa78",
-    "storageBucket": "attendance-bfa78.firebasestorage.app",
-    "messagingSenderId": "13347487257",
-    "appId": "1:13347487257:web:eadf04fb63d40086d4f488",
-    "measurementId": "G-K8KWGGWRX4"
+    "apiKey": st.secrets["firebase"]["apiKey"],
+    "databaseURL": st.secrets["firebase"]["databaseURL"],
+    "authDomain": st.secrets["firebase"]["authDomain"],
+    "projectId": st.secrets["firebase"]["projectId"],
+    "storageBucket": st.secrets["firebase"]["storageBucket"],
+    "messagingSenderId": st.secrets["firebase"]["messagingSenderId"],
+    "appId": st.secrets["firebase"]["appId"],
+    "measurementId": st.secrets["firebase"]["measurementId"]
 }
 
 # Initialize Firebase
