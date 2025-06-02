@@ -226,7 +226,7 @@ def save_attendance(date: datetime.date, attendance_data: dict):
         return False
 
 @st.cache_data
-def load_attendance(date: datetime.date, attendance_last_updated: str, user_email: str) -> dict:
+def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
     """Load attendance data from Firebase for a specific date."""
     try:
         user_email = st.session_state.email.replace('.', ',')
