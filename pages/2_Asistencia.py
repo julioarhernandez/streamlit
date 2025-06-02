@@ -194,7 +194,7 @@ def confirm_delete_all_dialog():
             reset_dialog_states()
             st.rerun()
             
-attendance_last_updated = get_last_updated('attendance')
+attendance_last_updated = get_last_updated('attendance', st.session_state.email)
 all_attendance = get_attendance_dates(attendance_last_updated)
 if all_attendance:
     # --- Main UI --- 

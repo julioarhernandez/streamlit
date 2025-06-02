@@ -4,7 +4,7 @@ import pandas as pd
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
 import datetime # Added for type hinting and date operations
 
-def get_last_updated(table_name):
+def get_last_updated(table_name, user_email=None):
     """
     Fetch the last_updated timestamp for a given table from Firebase metadata.
     
@@ -14,13 +14,22 @@ def get_last_updated(table_name):
     Returns:
         str or None: The last_updated ISO timestamp, or None if not found.
     """
-    metadata = db.child("metadata").child(table_name).get().val()
+    if user_email:
+        user_email = user_email.replace('.', ',')
+        ref = db.child("metadata").child(table_name).child(user_email)
+        snapshot = ref.get()
+        if snapshot.val() is not None:
+            metadata = snapshot.val()
+        else:
+            return None
+    else:
+        metadata = db.child("metadata").child(table_name).get().val()
     if metadata and 'last_updated' in metadata:
         return metadata['last_updated']
     else:
         return None
         
-def set_last_updated(table_name):
+def set_last_updated(table_name, user_email=None):
     """
     Update the last_updated timestamp for a given table in Firebase metadata to current UTC time.
     
@@ -31,9 +40,15 @@ def set_last_updated(table_name):
         str: The new last_updated ISO timestamp.
     """
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    db.child("metadata").child(table_name).update({
-        'last_updated': now_iso
-    })
+    if user_email:
+        user_email = user_email.replace('.', ',')
+        db.child("metadata").child(table_name).child(user_email).update({
+            'last_updated': now_iso
+        })
+    else:
+        db.child("metadata").child(table_name).update({
+            'last_updated': now_iso
+        })
     return now_iso
     
 
@@ -211,7 +226,7 @@ def save_attendance(date: datetime.date, attendance_data: dict):
         return False
 
 @st.cache_data
-def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
+def load_attendance(date: datetime.date, attendance_last_updated: str, user_email: str) -> dict:
     """Load attendance data from Firebase for a specific date."""
     try:
         user_email = st.session_state.email.replace('.', ',')
@@ -291,7 +306,7 @@ def save_attendance(date: datetime.date, attendance_data: list):
         # Ensure student names (keys in attendance_data) are safe for Firebase paths if necessary
         # For now, assuming they are simple strings.
         db.child("attendance").child(user_email).child(date_str).set(attendance_data)
-        set_last_updated('attendance')
+        set_last_updated('attendance', user_email)
         return True
     except Exception as e:
         st.error(f"Error saving attendance for {date_str}: {str(e)}")

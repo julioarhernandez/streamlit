@@ -39,6 +39,7 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.email = user['email']
         st.session_state.user_token = user['idToken'] # Store the token
+        st.cache_data.clear()
         st.rerun()
     except Exception as e: # Catch generic Firebase errors or others
         st.error(f"Error de inicio de sesión: Usuario o contraseña incorrectos.")
