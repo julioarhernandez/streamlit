@@ -325,7 +325,7 @@ def get_attendance_dates(attendance_last_updated: str):
         if 'call_count' not in st.session_state:
             st.session_state.call_count = 0
         st.session_state.call_count += 1
-        print(f"\n{st.session_state.call_count} ---get_attendance_dates-data from firebase----\n", docs)
+        print(f"\n{st.session_state.call_count} ---get_attendance_dates-data from firebase----\n{str(docs)[:100]}...")
 
         if not docs:
             return []
