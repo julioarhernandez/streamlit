@@ -185,24 +185,22 @@ else:
                 if phone:
                     message = f"Hola {student_name_only}, notamos que no has asistido a clases. ¿Todo está bien? Por favor contáctanos."
                     whatsapp_link = create_whatsapp_link(phone, message)
-                    whatsapp_html = f'<a href="{whatsapp_link}" target="_blank">💬</a>'
                 else:
-                    whatsapp_html = '📵 N/E'
+                    whatsapp_link = '#'
 
                 if email:
                     message = f"Hola {student_name_only}, notamos que no has asistido a clases. ¿Todo está bien? Por favor contáctanos."
                     teams_link = create_teams_link(email, message)
-                    teams_html = f'<a href="{teams_link}" target="_blank">💬</a>'
                 else:
-                    teams_html = '📵 No'
+                    teams_link = '#'
     
                 never_attended_data.append({
                     'Nombre': student_name.strip(),
                     'Inicio': start_date,
                     'Teléfono': phone or 'No disponible',
                     'Email': email or 'No disponible',
-                    'WhatsApp': whatsapp_html,
-                    'Teams': teams_html
+                    'WhatsApp': whatsapp_link,
+                    'Teams': teams_link
                 })
 
             df_never_attended = pd.DataFrame(never_attended_data)
@@ -212,9 +210,15 @@ else:
             df_display = df_never_attended[display_columns].copy()
 
             st.markdown("### Estudiantes que nunca asistieron")
-            st.markdown(
-                df_display.to_html(escape=False, index=False),
-                unsafe_allow_html=True
+            # Use st.dataframe for better display
+            st.dataframe(
+                df_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    'WhatsApp': st.column_config.LinkColumn(width="small", display_text="Contactar"),
+                    'Teams': st.column_config.LinkColumn(width="small", display_text="Contactar")
+                }
             )
             # Create CSV download
             try:
@@ -233,7 +237,8 @@ else:
                     data=csv_never_attended,
                     file_name=filename,
                     mime='text/csv; charset=utf-8-sig',
-                    key='download_never_attended_csv_btn'
+                    key='download_never_attended_csv_btn',
+                    type="primary"
                 )
             except Exception as e:
                 st.error(f"Error creating download file: {str(e)}")
@@ -250,7 +255,8 @@ else:
                         data=csv_never_attended,
                         file_name="nunca_asistieron.csv",
                         mime='text/csv; charset=utf-8-sig',
-                        key='download_never_attended_csv_btn_fallback'
+                        key='download_never_attended_csv_btn_fallback',
+                        type="primary"
                     )
                 except Exception as fallback_e:
                     st.error(f"Error creating fallback download: {str(fallback_e)}")
