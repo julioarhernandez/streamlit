@@ -209,7 +209,6 @@ else:
             display_columns = [col for col in df_never_attended.columns if col != 'Email']
             df_display = df_never_attended[display_columns].copy()
 
-            st.markdown("### Estudiantes que nunca asistieron")
             # Use st.dataframe for better display
             st.dataframe(
                 df_display,
