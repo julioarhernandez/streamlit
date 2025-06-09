@@ -73,6 +73,7 @@ def delete_module_from_db(user_email, module_key):
         return False
 
 # Function to load all modules for the current user from Firebase.
+
 def load_modules(user_email_from_session):
     if not user_email_from_session:
         return pd.DataFrame()

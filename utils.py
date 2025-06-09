@@ -747,3 +747,35 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
     except Exception as e:
         st.error(f"Error al cargar los módulos: {str(e)}")
         return []
+
+def generate_module_schedule(modules, first_cycle_start, num_cycles):
+    """
+    Args:
+        modules (list of dict): Each dict has 'name', 'order', 'duration_weeks'
+        first_cycle_start (datetime.date): Starting date for cicle 1
+        num_cycles (int): Number of cycles to generate
+
+    Returns:
+        dict: { cycle_number: [ {module_name, start_date, end_date}, ... ] }
+    """
+    modules_sorted = sorted(modules, key=lambda m: m['order'])
+    schedule = {}
+    current_cycle_start = first_cycle_start
+
+    for cicle in range(1, num_cycles + 1):
+        schedule[cicle] = []
+        current_start = current_cycle_start
+
+        for mod in modules_sorted:
+            end_date = current_start + datetime.timedelta(weeks=mod['duration_weeks'])
+            schedule[cicle].append({
+                'module_name': mod['name'],
+                'start_date': current_start,
+                'end_date': end_date,
+            })
+            current_start = end_date  # next module starts after this
+
+        # Calculate next cicle start: last module end + 1 day
+        current_cycle_start = schedule[cicle][-1]['end_date'] + datetime.timedelta(days=1)
+
+    return schedule
