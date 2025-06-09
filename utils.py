@@ -483,6 +483,46 @@ def get_student_start_date(all_students_df, student_name):
     
     return format_date_for_display(start_date)
 
+def get_student_phone(all_students_df, student_name):
+    """
+    Get phone number for a specific student.
+    Returns formatted phone number or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    phone = student_data.get('telefono', 'No especificada')
+    
+    return phone
+
+def get_student_email(all_students_df, student_name):
+    """
+    Get email for a specific student.
+    Returns formatted email or 'No especificada'.
+    """
+    if all_students_df.empty:
+        return 'No especificada'
+    
+    # Find student record (case-insensitive matching)
+    student_mask = all_students_df['nombre'].str.strip().str.lower() == student_name.strip().lower()
+    matching_students = all_students_df[student_mask]
+    
+    if matching_students.empty:
+        return 'No especificada'
+    
+    student_data = matching_students.iloc[0]
+    email = student_data.get('email', 'No especificada')
+    
+    return email
+
 def create_filename_date_range(start_date, end_date):
     """
     Create a date range string for filename from start and end dates.
