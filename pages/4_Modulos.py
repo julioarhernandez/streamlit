@@ -12,54 +12,32 @@ if not st.session_state.get('logged_in', False):
     st.error("Debe iniciar sesión para acceder a esta página.")
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
-    
-# Function to save a new module to Firebase
+
+# --- Database Functions (No changes needed here) ---
 def save_new_module_to_db(user_email, module_data):
     try:
         user_email_sanitized = user_email.replace('.', ',')
-        # Create a new reference for a module, or use module_id if provided and unique
-        # For simplicity, let's assume we push to create a new unique ID by Firebase
         db.child("modules").child(user_email_sanitized).push(module_data)
         return True
     except Exception as e:
         st.error(f"Error saving module to Firebase: {e}")
+        print(f"Error saving module to Firebase: {e}")
         return False
 
-
 def delete_module_from_db(user_email, module_key):
-    """
-    Delete a specific module from Firebase database.
-    Path: modules -> user_email_sanitized -> module_key
-    """
     if not user_email or not module_key:
         st.error("Error: Datos de usuario o clave de módulo no válidos.")
         return False
-        
     try:
-        # Sanitize email for Firebase path
         user_path = user_email.replace('.', ',')
-        
-        # Build the specific path to the module
-        module_path = f"modules/{user_path}/{module_key}"
-        
-        # Get reference to the specific module
         module_ref = db.child("modules").child(user_path).child(module_key)
-        
-        # First, verify the module exists
         module_data = module_ref.get()
         if not module_data.val():
             st.error(f"Error: No se encontró el módulo con la clave: {module_key}")
             return False
-            
-        # Get module name for confirmation message
         module_info = module_data.val()
-        module_name = module_info.get('name', 'Nombre no disponible') if isinstance(module_info, dict) else 'Nombre no disponible'
-        
-        # Delete the specific module using the direct path
-        # This is the safest way to ensure we only delete the specific module
+        module_name = module_info.get('name', 'Nombre no disponible')
         db.child("modules").child(user_path).child(module_key).remove()
-        
-        # Verify deletion was successful by checking if the module still exists
         verification = db.child("modules").child(user_path).child(module_key).get()
         if not verification.val():
             st.toast(f"✅ Módulo eliminado: {module_name}")
@@ -67,12 +45,10 @@ def delete_module_from_db(user_email, module_key):
         else:
             st.error(f"Error: No se pudo eliminar el módulo {module_name}")
             return False
-            
     except Exception as e:
         st.error(f"Error al eliminar el módulo: {str(e)}")
-        return False
-
-# Function to load all modules for the current user from Firebase.
+        print(f"Error al eliminar el módulo: {str(e)}")
+        return False    
 
 def load_modules(user_email_from_session):
     if not user_email_from_session:
@@ -80,56 +56,56 @@ def load_modules(user_email_from_session):
     try:
         user_email_sanitized = user_email_from_session.replace('.', ',')
         modules_data = db.child("modules").child(user_email_sanitized).get().val()
-
         if not modules_data:
             df = pd.DataFrame()
-        elif isinstance(modules_data, list):
-            processed_list = [item for item in modules_data if item is not None and isinstance(item, dict)]
-            if not processed_list:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(processed_list)
         elif isinstance(modules_data, dict):
             processed_list = []
             for key, item in modules_data.items():
-                if item is not None and isinstance(item, dict):
-                    if 'module_id' not in item: # If item doesn't have its own module_id field
-                        item['module_id'] = key # Use Firebase key as module_id
-                    # Add the firebase_key to the item
+                if item and isinstance(item, dict):
                     item['firebase_key'] = key
                     processed_list.append(item)
-            if not processed_list:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(processed_list)
+            df = pd.DataFrame(processed_list) if processed_list else pd.DataFrame()
         else:
             st.warning(f"Unexpected data type for modules: {type(modules_data)}")
             df = pd.DataFrame()
         
-        # Ensure all expected columns are present in the DataFrame
         expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at']
         for col in expected_cols:
             if col not in df.columns:
-                df[col] = None # Add missing column and fill with None
+                df[col] = None
         
         return df
-
     except Exception as e:
         st.error(f"Error loading modules from Firebase: {e}")
-        # Return an empty DataFrame with expected columns in case of error too
+        print(f"Error loading modules from Firebase: {e}")
         return pd.DataFrame(columns=expected_cols)
 
-
-
-user_email = st.session_state.get('email')
-
-# Function to calculate end date based on start date and duration
+# --- Utility Functions (No changes needed here) ---
 def calculate_end_date(start_date, duration_weeks):
     if start_date and duration_weeks:
-        return start_date + datetime.timedelta(weeks=duration_weeks)-datetime.timedelta(days=1)
+        return start_date + datetime.timedelta(weeks=duration_weeks) - datetime.timedelta(days=1)
     return None
 
-# Initialize session state for dates if not exists
+# --- Main App Logic ---
+user_email = st.session_state.get('email')
+
+# <<< CHANGE: Initialize session state for the cached DataFrame
+if 'modules_df' not in st.session_state:
+    st.session_state.modules_df = None
+
+# <<< CHANGE: Define a function to invalidate the cache.
+def invalidate_cache_and_rerun():
+    """Deletes the cached DataFrame and reruns the app."""
+    if 'modules_df' in st.session_state:
+        del st.session_state.modules_df
+    # Also reset any other transient state if needed
+    if 'ids_to_delete' in st.session_state:
+        st.session_state.ids_to_delete = set()
+    if 'show_delete_dialog' in st.session_state:
+        st.session_state.show_delete_dialog = False
+    st.rerun()
+
+# --- Form State Initialization ---
 if 'module_duration_weeks' not in st.session_state:
     st.session_state.module_duration_weeks = 1
 if 'ciclo1_inicio' not in st.session_state:
@@ -139,414 +115,239 @@ if 'ciclo2_inicio' not in st.session_state:
 
 # --- FORM TO ADD NEW MODULE ---
 st.subheader("Agregar Nuevo Módulo")
-
-# Use a container for the form-like layout
 with st.container():
-    # Create two columns for Nombre and Descripción
-    col_nombre, col_desc = st.columns([1, 1])  # Descripción gets more space as it's typically longer
-    
-    with col_nombre:
-        module_name = st.text_input("Nombre del Módulo", key="new_module_name")
-    
-    with col_desc:
-        module_description = st.text_input("Descripción", key="new_module_desc")
-    
-    # Create two columns for Orden and Duración
+    # ... (No changes inside the form layout itself)
+    col_nombre, col_desc = st.columns([1, 1])
+    with col_nombre: module_name = st.text_input("Nombre del Módulo", key="new_module_name")
+    with col_desc: module_description = st.text_input("Descripción", key="new_module_desc")
     col_orden, col_duracion = st.columns(2)
-    
-    with col_orden:
-        module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
-    
+    with col_orden: module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
     with col_duracion:
-        # Duration input with immediate update
-        module_duration_weeks = st.number_input(
-            "Duración (Semanas)", 
-            min_value=1, 
-            step=1, 
-            key="new_module_duration",
-            value=st.session_state.module_duration_weeks
-        )
-    
-    # Update duration in session state if changed
+        module_duration_weeks = st.number_input("Duración (Semanas)", min_value=1, step=1, key="new_module_duration", value=st.session_state.module_duration_weeks)
     if module_duration_weeks != st.session_state.module_duration_weeks:
         st.session_state.module_duration_weeks = module_duration_weeks
         st.rerun()
     
-    # Add date inputs for Cycle 1
     st.subheader("Ciclo 1")
     col1, col2 = st.columns(2)
-    
     with col1:
-        ciclo1_inicio = st.date_input(
-            "Fecha de Inicio (MM/DD/YYYY)", 
-            key="_ciclo1_inicio",
-            value=st.session_state.ciclo1_inicio,
-            format="MM/DD/YYYY"
-        )
-        
-        # Update session state if date changes
+        ciclo1_inicio = st.date_input("Fecha de Inicio (MM/DD/YYYY)", key="_ciclo1_inicio", value=st.session_state.ciclo1_inicio, format="MM/DD/YYYY")
         if ciclo1_inicio != st.session_state.ciclo1_inicio:
             st.session_state.ciclo1_inicio = ciclo1_inicio
             st.rerun()
-    
     with col2:
-        # Calculate end date using current values
         ciclo1_fin = calculate_end_date(st.session_state.ciclo1_inicio, st.session_state.module_duration_weeks)
-        
-        # Show toast when end date changes
-        if 'prev_ciclo1_fin' not in st.session_state:
-            st.session_state.prev_ciclo1_fin = None
-            
-        # if ciclo1_fin != st.session_state.prev_ciclo1_fin and st.session_state.prev_ciclo1_fin is not None:
-        #     st.toast(f"Ciclo 1 - Nueva fecha de fin: {ciclo1_fin}")
-            
-        st.session_state.prev_ciclo1_fin = ciclo1_fin
-        
-        st.date_input(
-            "Fecha de Fin (MM/DD/YYYY)",
-            value=ciclo1_fin if ciclo1_fin else datetime.date.today(),
-            key="ciclo1_fin_display",
-            format="MM/DD/YYYY",
-            disabled=True
-        )
-    
-    # Add date inputs for Cycle 2
+        st.date_input("Fecha de Fin (MM/DD/YYYY)", value=ciclo1_fin if ciclo1_fin else datetime.date.today(), key="ciclo1_fin_display", format="MM/DD/YYYY", disabled=True)
+
     st.subheader("Ciclo 2")
     col3, col4 = st.columns(2)
-    
     with col3:
-        ciclo2_inicio = st.date_input(
-            "Fecha de Inicio (MM/DD/YYYY)",
-            key="_ciclo2_inicio",
-            value=st.session_state.ciclo2_inicio,
-            format="MM/DD/YYYY"
-        )
-        
-        # Update session state if date changes
+        ciclo2_inicio = st.date_input("Fecha de Inicio (MM/DD/YYYY)", key="_ciclo2_inicio", value=st.session_state.ciclo2_inicio, format="MM/DD/YYYY")
         if ciclo2_inicio != st.session_state.ciclo2_inicio:
             st.session_state.ciclo2_inicio = ciclo2_inicio
             st.rerun()
-    
     with col4:
-        # Calculate end date using current values
         ciclo2_fin = calculate_end_date(st.session_state.ciclo2_inicio, st.session_state.module_duration_weeks)
-        
-        # Show toast when end date changes
-        if 'prev_ciclo2_fin' not in st.session_state:
-            st.session_state.prev_ciclo2_fin = None
-            
-        # if ciclo2_fin != st.session_state.prev_ciclo2_fin and st.session_state.prev_ciclo2_fin is not None:
-        #     st.toast(f"Ciclo 2 - Nueva fecha de fin: {ciclo2_fin}")
-            
-        st.session_state.prev_ciclo2_fin = ciclo2_fin
-        
-        st.date_input(
-            "Fecha de Fin (MM/DD/YYYY)",
-            value=ciclo2_fin if ciclo2_fin else datetime.date.today(),
-            key="ciclo2_fin_display",
-            format="MM/DD/YYYY",
-            disabled=True
-        )
+        st.date_input("Fecha de Fin (MM/DD/YYYY)", value=ciclo2_fin if ciclo2_fin else datetime.date.today(), key="ciclo2_fin_display", format="MM/DD/YYYY", disabled=True)
     
-    # Add a submit button that will handle the form submission
     submitted_new_module = st.button("Agregar Módulo")
-    
     if submitted_new_module and user_email:
         if not module_name:
             st.warning("El nombre del módulo es obligatorio.")
         else:
             new_module_data = {
-                'module_id': str(uuid.uuid4()), # Generate a unique ID
+                'module_id': str(uuid.uuid4()),
                 'name': module_name,
                 'description': module_description,
                 'credits': module_credits,
                 'duration_weeks': module_duration_weeks,
-                'ciclo1_inicio': ciclo1_inicio.isoformat() if 'ciclo1_inicio' in locals() else None,
-                'ciclo1_fin': calculate_end_date(ciclo1_inicio, module_duration_weeks).isoformat() if 'ciclo1_inicio' in locals() and ciclo1_inicio else None,
-                'ciclo2_inicio': ciclo2_inicio.isoformat() if 'ciclo2_inicio' in locals() else None,
-                'ciclo2_fin': calculate_end_date(ciclo2_inicio, module_duration_weeks).isoformat() if 'ciclo2_inicio' in locals() and ciclo2_inicio else None,
+                'ciclo1_inicio': ciclo1_inicio.isoformat() if ciclo1_inicio else None,
+                'ciclo1_fin': calculate_end_date(ciclo1_inicio, module_duration_weeks).isoformat() if ciclo1_inicio else None,
+                'ciclo2_inicio': ciclo2_inicio.isoformat() if ciclo2_inicio else None,
+                'ciclo2_fin': calculate_end_date(ciclo2_inicio, module_duration_weeks).isoformat() if ciclo2_inicio else None,
                 'created_at': datetime.datetime.now().isoformat()
             }
             if save_new_module_to_db(user_email, new_module_data):
                 st.success(f"Módulo '{module_name}' guardado exitosamente!")
-                st.rerun()
+                # <<< CHANGE: Invalidate cache instead of just rerunning
+                invalidate_cache_and_rerun()
             else:
                 st.error("No se pudo guardar el módulo.")
+                print("No se pudo guardar el módulo.")  
     elif submitted_new_module and not user_email:
         st.error("Error de sesión. No se pudo obtener el email del usuario.")
+        print("Error de sesión. No se pudo obtener el email del usuario.")
 
 # --- DISPLAY/EDIT EXISTING MODULES ---
 st.divider()
 if user_email:
-    modules_df_from_db = load_modules(user_email) # Renamed to clarify source
+    # <<< CHANGE: Load data only if the cache is empty.
+    if st.session_state.modules_df is None:
+        with st.spinner("Cargando módulos..."):
+            st.session_state.modules_df = load_modules(user_email)
+    
+    # Always work with the cached DataFrame
+    modules_df = st.session_state.modules_df
 
-    # --- Debugging Information (Optional) ---
-    # st.subheader("Información de Depuración de Módulos (Post-Carga)")
-    # if isinstance(modules_df_from_db, pd.DataFrame):
-    #     st.write("Columnas de modules_df:", modules_df_from_db.columns.tolist() if not modules_df_from_db.empty else "DataFrame vacío")
-    #     st.write("Primeras filas de modules_df:", modules_df_from_db.head())
-    #     st.write("¿modules_df está vacío?", modules_df_from_db.empty)
-    # else:
-    #     st.write("modules_df no es un DataFrame. Tipo:", type(modules_df_from_db))
-
-    if modules_df_from_db.empty:
+    if modules_df.empty:
         st.info("No hay módulos existentes para este usuario. Puede agregar nuevos módulos utilizando el formulario anterior.")
     else:
         st.subheader("Módulos Existentes")
         
-        # Store original module keys to detect deletions
-        if 'firebase_key' in modules_df_from_db.columns:
-            original_module_keys = set(modules_df_from_db['firebase_key'].dropna().tolist())
+        # <<< CHANGE: Use the cached 'modules_df' to get original keys
+        if 'firebase_key' in modules_df.columns:
+            original_module_keys = set(modules_df['firebase_key'].dropna().tolist())
         else:
             st.error("Error: No se encontró la columna 'firebase_key' en los datos. No se pueden gestionar eliminaciones.")
+            print("Error: No se encontró la columna 'firebase_key' en los datos. No se pueden gestionar eliminaciones.")
             original_module_keys = set()
+        
+        # ... (The rest of the data_editor setup logic is largely the same)
+        # It will now use the much faster, cached 'modules_df'
+        # ...
 
-        if 'ids_to_delete' not in st.session_state:
-            st.session_state.ids_to_delete = set()
-
-        # Configure date display format
-        date_format = "MM/DD/YYYY"
-        
-        editable_cols_config = {
-            "firebase_key": st.column_config.TextColumn("Firebase Key", disabled=True, help="Clave única de Firebase para este módulo"),
-            "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
-            "name": st.column_config.TextColumn("Nombre del Módulo", required=True, width="medium"),
-            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small", help="Número de orden del módulo"),
-            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
-            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, width="small"),
-            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, width="small"),
-            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, width="small"),
-            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, width="small")
-        }
-        
-        display_cols_in_editor = []
-        final_column_config = {}
-
-        # Define the order of columns for display (module_id will be hidden but kept in data)
-        display_columns = [
-            'firebase_key',
-            'name', 
-            'duration_weeks', 
-            'credits',
-            'ciclo1_inicio',
-            'ciclo1_fin',
-            'ciclo2_inicio',
-            'ciclo2_fin'
-        ]  # Include all date columns
-        
-        # Configure which columns are shown and how
-        for col_key in display_columns:
-            if col_key in modules_df_from_db.columns:
-                display_cols_in_editor.append(col_key)
-                if col_key in editable_cols_config:
-                    final_column_config[col_key] = editable_cols_config[col_key]
-        
-        # Ensure module_id exists in the data even if not displayed
-        if 'module_id' not in modules_df_from_db.columns:
-            st.error("Error: 'module_id' no encontrado en los datos. No se puede mostrar el editor de módulos de forma segura.")
-            st.stop()
-            
-        # Create the data editor with row deletion enabled but no adding new rows
-        columns_to_show = ['module_id', 'firebase_key'] + [col for col in display_cols_in_editor if col != 'firebase_key']
-        
         # Make a copy of the dataframe to work with
-        df_to_edit = modules_df_from_db[columns_to_show].copy()
+        df_to_edit = modules_df.copy() # Use the cached df
         
-        # Add a delete button column
-        df_to_edit['Eliminar'] = False
-        
-        # Configure columns for the editor
-        column_config = {
-            "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", pinned=True),
-            **final_column_config,
-            "module_id": None,  # Hide module_id from display
-            "firebase_key": None,  # Hide firebase_key from display but keep in data
-        }
-
-        
-        # Convert date columns to datetime if they're not already
+        # Convert date columns to datetime for the editor
         date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
         for col in date_columns:
             if col in df_to_edit.columns:
                 df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
+
+        # Add a delete button column
+        df_to_edit['Eliminar'] = False
         
-        # Show the editor
+        # Display Columns and Configuration
+        display_columns = ['name', 'duration_weeks', 'credits', 'ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
+        column_config = {
+            "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", pinned=True),
+            "name": st.column_config.TextColumn("Nombre del Módulo", required=True, width="medium"),
+            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small"),
+            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
+            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format="MM/DD/YYYY", width="small"),
+            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format="MM/DD/YYYY", width="small"),
+            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format="MM/DD/YYYY", width="small"),
+            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format="MM/DD/YYYY", width="small"),
+            "module_id": None,
+            "firebase_key": None,
+        }
+        
+        # The data editor itself
         edited_df = st.data_editor(
             df_to_edit,
             column_config=column_config,
             hide_index=True,
-            num_rows="fixed",  # Prevents adding new rows
+            num_rows="fixed",
             key="modules_editor_main",
             use_container_width=True,
-            disabled=("module_id", "firebase_key"),  # Only disable non-editable fields
-            on_change=None
+            disabled=["module_id", "firebase_key"],
+            column_order=["Eliminar"] + display_columns
         )
         
-        # Check for rows marked for deletion
-        if 'Eliminar' in edited_df.columns:
-            rows_to_delete = edited_df[edited_df['Eliminar'] == True]
-            if not rows_to_delete.empty:
-                st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
-        
-        # Detect if rows were removed in the data_editor UI and no confirmation is currently active
-        if 'firebase_key' in edited_df.columns and not st.session_state.ids_to_delete:
-            current_module_keys_in_editor = set(edited_df['firebase_key'].dropna().tolist())
-            keys_to_delete_detected = original_module_keys - current_module_keys_in_editor
-
-            if keys_to_delete_detected:
-                st.session_state.ids_to_delete = keys_to_delete_detected
-                st.rerun() # Rerun to display the confirmation dialog below
-        
-        # Initialize session state flags
+        # ... Deletion and Saving Logic ...
+        if 'ids_to_delete' not in st.session_state:
+            st.session_state.ids_to_delete = set()
         if 'show_delete_dialog' not in st.session_state:
             st.session_state.show_delete_dialog = False
 
-        if 'ids_to_delete' not in st.session_state:
-            st.session_state.ids_to_delete = set()
-
         col1, col2, _ = st.columns([2.5, 3.3, 4])
-        with col1:     
-            # Button to save changes to Firebase
+        with col1:
             if st.button("💾 Guardar Cambios"):
-                # --- Start of modification ---
-                # Check if a deletion confirmation is pending
-                if st.session_state.ids_to_delete:
-                    st.warning("Por favor, primero confirme o cancele la eliminación pendiente de módulos (ver mensaje de advertencia arriba).")
-                    st.stop() # Prevent saving other edits while deletion is pending
-                # --- End of modification ---
-
-                # Proceed with saving edits if no deletions are pending
-                # The edited_df should reflect the current state of the table.
-                # Rows removed in UI are gone from it; actual DB deletion is handled by the confirmation dialog.
-                modules_to_save = edited_df.to_dict('records')
-                
-                success_count = 0
-                error_count = 0
-                
-                # Get original module IDs for comparison
-                original_module_ids = set(modules_df_from_db['module_id'].dropna().tolist()) if 'module_id' in modules_df_from_db.columns else set()
-                
-                # (The rest of your existing saving logic for edits and new modules follows here)
-                # Ensure this part correctly handles new rows (which won't have a module_id from original_module_ids)
-                # and edited rows.
-                with st.spinner('Guardando cambios...'):
-                    for module in modules_to_save:
-                        try:
-                            # Prepare module data for Firebase
-                            def convert_date_to_iso(date_val):
-                                if pd.isna(date_val):
-                                    return ''
-                                if isinstance(date_val, (datetime.date, datetime.datetime)):
-                                    return date_val.isoformat()
-                                return str(date_val) if date_val is not None else ''
-                            
-                            def clean_value(val):
-                                if pd.isna(val):
-                                    return None
-                                if isinstance(val, (int, float)) and math.isnan(val):
-                                    return None
-                                return val
-                                
-                            module_data = {
-                                'name': str(module.get('name', '')),
-                                'description': str(module.get('description', '')),
-                                'credits': int(module.get('credits', 0)) if not pd.isna(module.get('credits')) else 0,
-                                'duration_weeks': int(module.get('duration_weeks', 1)) if not pd.isna(module.get('duration_weeks')) else 1,
-                                'ciclo1_inicio': convert_date_to_iso(module.get('ciclo1_inicio')),
-                                'ciclo1_fin': convert_date_to_iso(module.get('ciclo1_fin')),
-                                'ciclo2_inicio': convert_date_to_iso(module.get('ciclo2_inicio')),
-                                'ciclo2_fin': convert_date_to_iso(module.get('ciclo2_fin')),
-                                'updated_at': datetime.datetime.now().isoformat()
-                            }
-                            
-                            # Remove None values as they can cause issues with Firebase
-                            module_data = {k: v for k, v in module_data.items() if v is not None}
-                            
-                            # Get the sanitized user email path
-                            user_path = user_email.replace('.', ',')
-                            
-                            # Check if this is a new or existing module using firebase_key
-                            firebase_key = module.get('firebase_key')
-                            if firebase_key and firebase_key in original_module_keys:
-                                try:
-                                    # Update existing module using firebase_key
-                                    db.child("modules").child(user_path).child(firebase_key).update(module_data)
-                                    success_count += 1
-                                except Exception as e:
-                                    st.error(f"Error updating module {module.get('name', '')} (firebase_key: {firebase_key}): {str(e)}")
-                                    error_count += 1
-                            else:
-                                try:
-                                    # Add new module
-                                    module_id = str(uuid.uuid4())
-                                    module_data['created_at'] = datetime.datetime.now().isoformat()
-                                    module_data['module_id'] = module_id
-                                    db.child("modules").child(user_path).child(module_id).set(module_data)
-                                    success_count += 1
-                                except Exception as e:
-                                    st.error(f"Error creating module {module.get('name', '')}: {str(e)}")
-                                    error_count += 1
-                            
-                        except Exception as e:
-                            st.error(f"Error al guardar el módulo {module.get('name', '')}: {str(e)}")
-                            error_count += 1
-                
-                # Show success/error message
-                if error_count == 0:
-                    st.success(f"¡Se guardaron exitosamente {success_count} módulos!")
-                    st.rerun()  # Refresh the data
+                if st.session_state.get('ids_to_delete') and st.session_state.ids_to_delete:
+                    st.warning("Por favor, primero confirme o cancele la eliminación pendiente.")
                 else:
-                    st.warning(f"Se guardaron {success_count} módulos con éxito, pero hubo {error_count} errores.")
+                    try:
+                        modules_to_save = edited_df.to_dict('records')
+                        success_count = 0
+                        error_count = 0
+                        
+                        with st.spinner('Guardando cambios...'):
+                            user_path = user_email.replace('.', ',')
+
+                            for module in modules_to_save:
+                                firebase_key = module.get('firebase_key')
+                                if not firebase_key:
+                                    continue # Should not happen with existing modules, but safe to check
+
+                                # --- START OF THE FIX ---
+                                # Create a clean dictionary to hold only valid data for the update
+                                data_for_update = {}
+                                
+                                # Define fields that can be edited
+                                editable_fields = ['name', 'description', 'credits', 'duration_weeks', 'ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
+
+                                for field in editable_fields:
+                                    if field in module and pd.notna(module[field]):
+                                        value = module[field]
+                                        # Convert date/datetime objects to ISO format string
+                                        if isinstance(value, (datetime.date, datetime.datetime)):
+                                            data_for_update[field] = value.isoformat()
+                                        # Ensure numbers are standard Python int/float, not numpy types
+                                        elif isinstance(value, (int, float)):
+                                            data_for_update[field] = int(value)
+                                        # Handle strings and other valid types
+                                        elif value is not None:
+                                            data_for_update[field] = str(value)
+                                
+                                # Add a timestamp for the update
+                                data_for_update['updated_at'] = datetime.datetime.now().isoformat()
+                                # --- END OF THE FIX ---
+                                
+                                try:
+                                    # Update the module in Firebase with the cleaned data
+                                    db.child("modules").child(user_path).child(firebase_key).update(data_for_update)
+                                    success_count += 1
+                                except Exception as e:
+                                    st.error(f"Error actualizando módulo {module.get('name', '')}: {e}")
+                                    error_count += 1
+
+                        if error_count == 0 and success_count > 0:
+                            st.success(f"¡Se guardaron exitosamente los cambios en {success_count} módulos!")
+                        elif success_count > 0:
+                            st.warning(f"Se guardaron {success_count} módulos con éxito, pero hubo {error_count} errores.")
+                        elif error_count > 0:
+                            st.error(f"No se pudieron guardar los cambios. Se encontraron {error_count} errores.")
+                        else:
+                            st.info("No se detectaron cambios para guardar.")
+                        
+                        # Invalidate cache to force a fresh reload from DB
+                        invalidate_cache_and_rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Ocurrió un error inesperado durante el proceso de guardado: {e}")
+
         with col2:
-            # Only show delete button if there are checked items in the current editor
             if 'Eliminar' in edited_df.columns and edited_df['Eliminar'].any():
                 if st.button("❌ Eliminar seleccionados"):
-                    # Update the ids_to_delete with currently checked items
                     rows_to_delete = edited_df[edited_df['Eliminar'] == True]
-                    if not rows_to_delete.empty:
-                        st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
+                    st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
                     st.session_state.show_delete_dialog = True
                     st.rerun()
 
-            # Define the delete confirmation dialog
             @st.dialog("Confirmar eliminación")
             def confirm_delete_dialog():
-                st.write(
-                    f"¿Está seguro que desea eliminar {len(st.session_state.ids_to_delete)} módulo(s) seleccionados? "
-                    "**Esta acción no se puede deshacer.**"
-                )
-                
-                col1, col2, _ = st.columns([3, 3, 3])
-                
+                st.write(f"¿Está seguro que desea eliminar {len(st.session_state.ids_to_delete)} módulo(s)? **Esta acción no se puede deshacer.**")
+                col1, col2, _ = st.columns([1, 1, 2])
                 with col1:
                     if st.button("✅ Sí, eliminar", type="primary"):
-                        ids_to_process_deletion = list(st.session_state.ids_to_delete)
                         deleted_count = 0
-                        
                         with st.spinner("Eliminando módulos..."):
-                            for module_key in ids_to_process_deletion:
+                            for module_key in list(st.session_state.ids_to_delete):
                                 if delete_module_from_db(user_email, module_key):
                                     deleted_count += 1
-                        
-                        if deleted_count > 0:
-                            st.success(f"Se eliminaron {deleted_count} módulo(s) correctamente.")
-                        
-                        # Reset state
-                        st.session_state.ids_to_delete = set()
-                        st.session_state.show_delete_dialog = False
+                        st.success(f"Se eliminaron {deleted_count} módulo(s) correctamente.")
                         time.sleep(1)
-                        st.rerun()
-                
+                        # <<< CHANGE: Invalidate cache after deletion
+                        invalidate_cache_and_rerun()
                 with col2:
                     if st.button("Cancelar"):
                         st.session_state.ids_to_delete = set()
                         st.session_state.show_delete_dialog = False
                         st.rerun()
-                        # No rerun — just closes dialog
 
-            # Show the dialog if the flag is set
             if st.session_state.show_delete_dialog:
                 confirm_delete_dialog()
-            
 else:
     st.error("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")
+    print("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")

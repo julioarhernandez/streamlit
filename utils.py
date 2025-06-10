@@ -259,6 +259,48 @@ def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
         return {}
 
 # --- Module Management Functions ---
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_modules_from_db(user_email: str) -> pd.DataFrame:
+    """Load modules data from Firebase with caching."""
+    try:
+        user_email_sanitized = user_email.replace('.', ',')
+        modules_data = db.child("modules").child(user_email_sanitized).get().val()
+        
+        if not modules_data:
+            return pd.DataFrame(columns=['Nombre', 'Duración (semanas)'])
+            
+        # Convert to DataFrame
+        if isinstance(modules_data, list):
+            df = pd.DataFrame(modules_data)
+        else:
+            df = pd.DataFrame()
+        return df
+        
+    except Exception as e:
+        st.error(f"Error al cargar los módulos: {str(e)}")
+        return pd.DataFrame(columns=['Nombre', 'Duración (semanas)'])
+
+def load_modules(user_email: str) -> pd.DataFrame:
+    """Load modules from session if available, otherwise from database."""
+    if 'modules' not in st.session_state:
+        st.session_state.modules = load_modules_from_db(user_email)
+    return st.session_state.modules
+
+def update_modules_in_session(updated_df: pd.DataFrame):
+    """Update modules in session state."""
+    st.session_state.modules = updated_df
+
+def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
+    """Save modules to Firebase and update session."""
+    try:
+        user_email_sanitized = user_email.replace('.', ',')
+        db.child("modules").child(user_email_sanitized).set(modules_df.to_dict('records'))
+        update_modules_in_session(modules_df)
+        return True
+    except Exception as e:
+        st.error(f"Error saving modules: {str(e)}")
+        return False
 def delete_student(student_nombre_to_delete: str) -> bool:
     """Delete a student from the Firebase list by their 'nombre'."""
     try:
@@ -787,6 +829,20 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
     except Exception as e:
         st.error(f"Error al cargar los módulos: {str(e)}")
         return []
+
+def adjust_for_breaks(start, end, breaks):
+    """
+    Adjusts the end date if a break overlaps the module period.
+    """
+    extra_days = datetime.timedelta(days=0)
+    for b_start, b_end in breaks:
+        if b_end < start or b_start > end:
+            continue  # no overlap
+        overlap_start = max(start, b_start)
+        overlap_end = min(end, b_end)
+        overlap_days = (overlap_end - overlap_start + datetime.timedelta(days=1)).days
+        extra_days += datetime.timedelta(days=overlap_days)
+    return start, end + extra_days
 
 def generate_module_schedule(modules, first_cycle_start, num_cycles):
     """
