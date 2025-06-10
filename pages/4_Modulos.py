@@ -213,7 +213,8 @@ with st.form("new_module_form", clear_on_submit=True):
 # --- DISPLAY/EDIT EXISTING MODULES ---
 st.divider()
 if user_email:
-    if st.session_state.modules_df is None:
+    # This part is fine: Load from DB if cache is empty
+    if 'modules_df' not in st.session_state or st.session_state.modules_df is None:
         with st.spinner("Cargando módulos..."):
             st.session_state.modules_df = load_modules(user_email)
     
@@ -224,14 +225,12 @@ if user_email:
     else:
         st.subheader("Módulos Existentes y Planificación")
 
-        # --- DATA EDITOR (Now defined before the button that uses its output) ---
+        # --- DATA EDITOR (Defined before any logic that uses its output) ---
         df_to_edit = modules_df.copy()
-        
         date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
         for col in date_columns:
             if col in df_to_edit.columns:
                 df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
-
         df_to_edit['Eliminar'] = False
         
         column_config = {
@@ -246,43 +245,37 @@ if user_email:
             "module_id": None, "firebase_key": None, "description": None, "created_at": None,
         }
         
-        # This is the single source of truth for the edited data in this script run
+        # This is the single source of truth. It's ALWAYS a DataFrame.
         edited_df = st.data_editor(
             df_to_edit,
             column_config=column_config,
             hide_index=True,
             num_rows="dynamic",
-            key="modules_editor_main",
+            key="modules_editor_main", # The key is still needed, but we won't read from it.
             use_container_width=True,
         )
 
-        # --- RECALCULATION UI (Now uses the 'edited_df' variable directly) ---
+        # --- RECALCULATION UI ---
         col1, col2 = st.columns([1, 2])
         with col1:
-            program_start_date = st.date_input(
-                "Fecha de Inicio del Programa",
-                value=datetime.date.today(),
-                key="program_start_date"
-            )
+            program_start_date = st.date_input("Fecha de Inicio del Programa", value=datetime.date.today(), key="program_start_date")
 
         with col2:
             st.write("") # Spacer
             st.write("") # Spacer
             if st.button("🚀 Recalcular y Guardar Fechas", type="primary", use_container_width=True):
                 with st.spinner("Calculando nuevo cronograma y guardando..."):
-                    # --- START OF THE DEFINITIVE FIX ---
-                    # Use the DataFrame returned by st.data_editor directly.
-                    # This avoids any issues with stale/corrupted session state.
+                    
+                    # --- THE DEFINITIVE FIX ---
+                    # Use the 'edited_df' variable directly. It is guaranteed to be a DataFrame.
+                    # Do NOT use st.session_state.modules_editor_main.
                     modules_from_editor = edited_df.to_dict('records')
-                    # --- END OF THE DEFINITIVE FIX ---
+                    # --- END OF FIX ---
 
-                    current_modules = [
-                        mod for mod in modules_from_editor
-                        if isinstance(mod, dict) and mod.get('firebase_key')
-                    ]
+                    current_modules = [mod for mod in modules_from_editor if isinstance(mod, dict) and mod.get('firebase_key')]
 
                     if not current_modules:
-                        st.warning("No hay módulos existentes para calcular. Agregue un módulo primero.")
+                        st.warning("No hay módulos existentes para calcular.")
                     else:
                         breaks = parse_breaks(breaks_list)
                         updated_modules_with_dates = calculate_schedule(current_modules, program_start_date, breaks)
@@ -292,8 +285,8 @@ if user_email:
                             for mod in updated_modules_with_dates:
                                 firebase_key = mod.get('firebase_key')
                                 if firebase_key:
-                                    mod_to_save = mod.copy()
-                                    mod_to_save.pop('Eliminar', None)
+                                    # Sanitize the dictionary to remove NaNs before saving
+                                    mod_to_save = {key: value for key, value in mod.items() if key != 'Eliminar' and pd.notna(value)}
                                     update_payload[firebase_key] = mod_to_save
 
                             if update_payload:
@@ -310,9 +303,9 @@ if user_email:
                         else:
                             st.warning("No se pudieron calcular las fechas del cronograma.")
         
-        st.info("Cambie el 'Orden' o 'Semanas' y presione 'Recalcular' para actualizar el cronograma.", icon="ℹ️")
+        st.info("Cambie el 'Orden' o 'Semanas' y presione 'Recalcular' para actualizar.", icon="ℹ️")
 
-        # --- Deletion Logic (Also uses the 'edited_df' variable) ---
+        # --- Deletion Logic (Also uses 'edited_df' directly) ---
         rows_to_delete = edited_df[edited_df['Eliminar'] == True]
         if not rows_to_delete.empty:
             st.warning("Ha marcado módulos para eliminar. La eliminación es permanente.")
@@ -327,4 +320,4 @@ if user_email:
                 st.success(f"{deleted_count} módulo(s) eliminados. Puede recalcular las fechas para el resto.")
                 invalidate_cache_and_rerun()
 else:
-    st.error("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")
+    st.error("Error de sesión: No se pudo obtener el email del usuario.")
