@@ -179,7 +179,9 @@ def load_modules(user_email_from_session):
         ]
         df = pd.DataFrame(processed_list) if processed_list else pd.DataFrame()
         
-        expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at', 'ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
+        # Updated expected_cols to match the new date column names
+        expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at', 
+                          'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = None
@@ -287,23 +289,16 @@ if user_email:
         # --- EDITOR DE DATOS (Definido antes de cualquier lógica que use su salida) ---
         df_to_edit = modules_df.copy()
         
-        # Mapeo de nombres de columnas viejos a nuevos
-        column_mapping = {
-            'ciclo1_inicio': 'fecha_inicio_1',
-            'ciclo1_fin': 'fecha_fin_1',
-            'ciclo2_inicio': 'fecha_inicio_2',
-            'ciclo2_fin': 'fecha_fin_2'
-        }
+        # Define the date columns directly with the desired names
+        date_columns = ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
         
-        # Renombrar columnas si existen
-        df_to_edit = df_to_edit.rename(columns=column_mapping)
-        
-        # Actualizar date_columns con los nuevos nombres
-        date_columns = list(column_mapping.values())
-        
+        # Convertir las columnas de fecha a tipo datetime.date para el data_editor
         for col in date_columns:
             if col in df_to_edit.columns:
-                df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
+                try:
+                    df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
+                except Exception as e:
+                    st.error(f"Error al convertir la columna {col} a fecha para visualización: {str(e)}")
         df_to_edit['Eliminar'] = False
         
         # Configuración de columnas en el orden solicitado
