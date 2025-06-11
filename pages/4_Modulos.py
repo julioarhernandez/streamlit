@@ -223,20 +223,25 @@ with st.form("new_module_form", clear_on_submit=True):
         if not module_name:
             st.warning("El nombre del módulo es obligatorio.")
         else:
-            new_module_data = {
-                'module_id': str(uuid.uuid4()),
-                'name': module_name,
-                'description': module_description,
-                'credits': module_credits,
-                'duration_weeks': module_duration_weeks,
-                'created_at': datetime.datetime.now().isoformat()
-                # Las fechas se omiten intencionadamente; se calcularán más tarde.
-            }
-            if save_new_module_to_db(user_email, new_module_data):
-                st.success(f"Módulo '{module_name}' agregado. Ahora puede recalcular las fechas.")
-                invalidate_cache_and_rerun()
+            # Load current modules to check for duplicates
+            current_modules_df = load_modules(user_email)
+            if not current_modules_df.empty and module_credits in current_modules_df['credits'].values:
+                st.warning(f"Ya existe un módulo con la orden (créditos) '{module_credits}'. Por favor, elija un valor diferente.")
             else:
-                st.error("No se pudo guardar el módulo.")
+                new_module_data = {
+                    'module_id': str(uuid.uuid4()),
+                    'name': module_name,
+                    'description': module_description,
+                    'credits': module_credits,
+                    'duration_weeks': module_duration_weeks,
+                    'created_at': datetime.datetime.now().isoformat()
+                    # Las fechas se omiten intencionadamente; se calcularán más tarde.
+                }
+                if save_new_module_to_db(user_email, new_module_data):
+                    st.success(f"Módulo '{module_name}' agregado. Ahora puede recalcular las fechas.")
+                    invalidate_cache_and_rerun()
+                else:
+                    st.error("No se pudo guardar el módulo.")
 
 # --- MOSTRAR/EDITAR MÓDULOS EXISTENTES ---
 st.divider()
