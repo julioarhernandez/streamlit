@@ -15,7 +15,7 @@ if not st.session_state.get('logged_in', False):
 
 # --- MOCK DATA (to be replaced by a DB table later) ---
 breaks_list = [
-    {'name': 'Spring Break', 'start_date': '2025-06-01', 'end_date': '2025-06-08'},
+    {'name': 'Spring Break', 'start_date': '2025-06-16', 'end_date': '2025-06-22'},
     {'name': 'Summer Break', 'start_date': '2025-06-30', 'end_date': '2025-07-06'},
 ]
 
@@ -210,12 +210,7 @@ def calculate_schedule(modules_list, initial_start_date, breaks):
             current_date_for_duration += datetime.timedelta(days=1)
         
         final_end_date = current_date_for_duration - datetime.timedelta(days=1)
-        
-        modules_dict[key]['fecha_inicio_2'] = current_start_c2.isoformat()
-        modules_dict[key]['fecha_fin_2'] = final_end_date.isoformat()
 
-        # La fecha de inicio para el *siguiente* módulo en el Ciclo 2 es el día después del fin del módulo actual
-        current_start_c2 = final_end_date + datetime.timedelta(days=1)
 
     # Retornar los módulos actualizados como una lista de diccionarios
     return list(modules_dict.values())
@@ -237,9 +232,6 @@ def find_current_module_info(modules_df, today):
         # This acts as a safeguard in case they are still strings or other types
         fecha_inicio_1 = pd.to_datetime(row['fecha_inicio_1'], errors='coerce').date() if pd.notna(row['fecha_inicio_1']) else None
         fecha_fin_1 = pd.to_datetime(row['fecha_fin_1'], errors='coerce').date() if pd.notna(row['fecha_fin_1']) else None
-        fecha_inicio_2 = pd.to_datetime(row['fecha_inicio_2'], errors='coerce').date() if pd.notna(row['fecha_inicio_2']) else None
-        fecha_fin_2 = pd.to_datetime(row['fecha_fin_2'], errors='coerce').date() if pd.notna(row['fecha_fin_2']) else None
-
         # Check Cycle 1
         if fecha_inicio_1 and fecha_fin_1: # Ensure they are valid dates
             if fecha_inicio_1 <= today <= fecha_fin_1:
@@ -249,15 +241,6 @@ def find_current_module_info(modules_df, today):
                 current_cycle = 1
                 return current_module_start, current_module_order, current_module_name, current_cycle
         
-        # Check Cycle 2
-        if fecha_inicio_2 and fecha_fin_2: # Ensure they are valid dates
-            if fecha_inicio_2 <= today <= fecha_fin_2:
-                current_module_start = fecha_inicio_2
-                current_module_order = int(row['credits'])
-                current_module_name = row['name']
-                current_cycle = 2
-                return current_module_start, current_module_order, current_module_name, current_cycle
-                
     return None, None, None, None
 
 
@@ -304,13 +287,13 @@ def load_modules(user_email_from_session):
         
         # Updated expected_cols to match the new date column names
         expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at', 
-                          'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
+                          'fecha_inicio_1', 'fecha_fin_1']
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = None
         
         # Convert date columns to datetime.date objects here after DataFrame creation
-        date_cols_to_convert = ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
+        date_cols_to_convert = ['fecha_inicio_1', 'fecha_fin_1']
         for col in date_cols_to_convert:
             if col in df.columns and df[col].notna().any(): # Only convert if column exists and has non-NaN values
                 df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
@@ -398,9 +381,9 @@ if user_email:
 
         # Get the currently stored dates from modules_df for comparison later
         # Create a simplified DataFrame for comparison of only date columns
-        current_dates_df = modules_df[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']].copy()
+        current_dates_df = modules_df[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1']].copy()
         # Convert to string to avoid issues with NaT vs None in comparison
-        for col in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+        for col in ['fecha_inicio_1', 'fecha_fin_1']:
             current_dates_df[col] = current_dates_df[col].astype(str)
 
         if current_module_start:
@@ -438,9 +421,9 @@ if user_email:
                 # Ensure the same columns and types are used for accurate comparison
                 calculated_df_temp = pd.DataFrame(updated_modules_with_dates_list)
                 # Select only the date columns for comparison, and ensure 'firebase_key' is present
-                calculated_df_compare = calculated_df_temp[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']].copy()
+                calculated_df_compare = calculated_df_temp[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1']].copy()
                 # Convert to string to avoid issues with NaT vs None in comparison
-                for col in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+                for col in ['fecha_inicio_1', 'fecha_fin_1']:
                     calculated_df_compare[col] = calculated_df_compare[col].astype(str)
                 
                 # Merge with current_dates_df to compare dates for the same firebase_key
@@ -448,7 +431,7 @@ if user_email:
                 
                 # Identify if any date column has changed
                 dates_have_changed = False
-                for col_name in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+                for col_name in ['fecha_inicio_1', 'fecha_fin_1']:
                     if not merged_df[f"{col_name}_current"].equals(merged_df[f"{col_name}_calc"]):
                         dates_have_changed = True
                         break
@@ -514,7 +497,7 @@ if user_email:
         df_to_edit = modules_df.copy()
         
         # Define the date columns directly with the desired names
-        date_columns = ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
+        date_columns = ['fecha_inicio_1', 'fecha_fin_1']
         
         # Convertir las columnas de fecha a tipo datetime.date para el data_editor (ya se hizo en load_modules, pero es una doble verificación)
         for col in date_columns:
@@ -531,10 +514,8 @@ if user_email:
             "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
             "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, required=True, width="small"),
             "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, required=True, width="small"),
-            "fecha_inicio_1": st.column_config.DateColumn("Fecha Inicio 1", format="MM/DD/YYYY", disabled=True),
-            "fecha_fin_1": st.column_config.DateColumn("Fecha Fin 1", format="MM/DD/YYYY", disabled=True),
-            "fecha_inicio_2": st.column_config.DateColumn("Fecha Inicio 2", format="MM/DD/YYYY", disabled=True),
-            "fecha_fin_2": st.column_config.DateColumn("Fecha Fin 2", format="MM/DD/YYYY", disabled=True),
+            "fecha_inicio_1": st.column_config.DateColumn("Fecha Inicio", format="MM/DD/YYYY", disabled=True),
+            "fecha_fin_1": st.column_config.DateColumn("Fecha Fin", format="MM/DD/YYYY", disabled=True),
             "module_id": None, "firebase_key": None, "description": None, "created_at": None, "updated_at": None,
         }
         
@@ -545,9 +526,7 @@ if user_email:
             "duration_weeks", 
             "credits", 
             "fecha_inicio_1", 
-            "fecha_fin_1", 
-            "fecha_inicio_2", 
-            "fecha_fin_2"
+            "fecha_fin_1"
         ]
         
         # Asegurarse de que solo se incluyan las columnas que existen en el DataFrame
