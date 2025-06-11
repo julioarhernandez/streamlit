@@ -445,7 +445,6 @@ if user_email:
                         else:
                             st.warning("No se pudieron calcular las fechas del cronograma.")
         
-        st.info("Cambie el 'Orden' o 'Semanas' y presione 'Recalcular' para actualizar.", icon="ℹ️")
 
 else:
     st.error("Error de sesión: No se pudo obtener el email del usuario.")
