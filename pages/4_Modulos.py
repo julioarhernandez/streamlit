@@ -225,6 +225,43 @@ if user_email:
     else:
         st.subheader("Módulos Existentes y Planificación")
 
+        # --- SAVE UPDATED MODULES FUNCTION ---
+        def save_updated_modules(updated_df):
+            try:
+                update_payload = {}
+                for _, row in updated_df.iterrows():
+                    if pd.notna(row.get('firebase_key')):
+                        # Convert row to dict and clean it up
+                        mod_updates = row.drop('Eliminar', errors='ignore').to_dict()
+                        
+                        # Process each value in the row
+                        clean_updates = {}
+                        for k, v in mod_updates.items():
+                            if v is None or pd.isna(v) or k == 'firebase_key':
+                                continue
+                                
+                            # Convert numpy types to Python native types
+                            if hasattr(v, 'item'):
+                                v = v.item()
+                                
+                            # Convert date objects to ISO format strings
+                            if isinstance(v, (datetime.date, datetime.datetime)):
+                                v = v.isoformat()
+                                
+                            clean_updates[k] = v
+                            
+                        if clean_updates:  # Only add if there are updates
+                            update_payload[row['firebase_key']] = clean_updates
+                
+                if update_payload:
+                    user_path = user_email.replace('.', ',')
+                    db.child("modules").child(user_path).update(update_payload)
+                    return True, "¡Cambios guardados exitosamente!"
+                return False, "No hay cambios para guardar."
+            except Exception as e:
+                import traceback
+                return False, f"Error al guardar cambios: {str(e)}\n{traceback.format_exc()}"
+
         # --- DATA EDITOR (Defined before any logic that uses its output) ---
         df_to_edit = modules_df.copy()
         date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
@@ -251,9 +288,22 @@ if user_email:
             column_config=column_config,
             hide_index=True,
             num_rows="dynamic",
-            key="modules_editor_main", # The key is still needed, but we won't read from it.
+            key="modules_editor_main",
             use_container_width=True,
         )
+        
+        # Add Save Changes button
+        if not edited_df.equals(df_to_edit):
+            if st.button("💾 Guardar Cambios", type="primary"):
+                success, message = save_updated_modules(edited_df)
+                if success:
+                    st.success(message)
+                    invalidate_cache_and_rerun()
+                else:
+                    st.error(message)
+            st.warning("Tiene cambios sin guardar. Haga clic en 'Guardar Cambios' para guardar sus modificaciones.")
+        else:
+            st.info("Realice cambios en la tabla y haga clic en 'Guardar Cambios' para guardar.")
 
         # --- RECALCULATION UI ---
         col1, col2 = st.columns([1, 2])
