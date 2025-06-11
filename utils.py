@@ -785,9 +785,9 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                 
             module_name = module_data.get('name', 'Módulo sin nombre')
             
-            # Process ciclo 1 if it exists
-            if 'ciclo1_inicio' in module_data and module_data['ciclo1_inicio']:
-                start_date = module_data['ciclo1_inicio']
+            # Process ciclo 1 if it exists (using new field names)
+            if 'fecha_inicio_1' in module_data and module_data['fecha_inicio_1']:
+                start_date = module_data['fecha_inicio_1']
                 if isinstance(start_date, str):
                     try:
                         start_date_dt = datetime.datetime.fromisoformat(start_date)
@@ -796,15 +796,15 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'label': f"{module_name} (Ciclo 1 - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
                                 'module_id': module_id,
                                 'ciclo': 1,
-                                'start_date': module_data['ciclo1_inicio'],
+                                'start_date': module_data['fecha_inicio_1'],
                                 'module_name': module_name
                             })
                     except (ValueError, TypeError):
                         continue
             
-            # Process ciclo 2 if it exists
-            if 'ciclo2_inicio' in module_data and module_data['ciclo2_inicio']:
-                start_date = module_data['ciclo2_inicio']
+            # Process ciclo 2 if it exists (using new field names)
+            if 'fecha_inicio_2' in module_data and module_data['fecha_inicio_2']:
+                start_date = module_data['fecha_inicio_2']
                 if isinstance(start_date, str):
                     try:
                         start_date_dt = datetime.datetime.fromisoformat(start_date)
@@ -813,7 +813,7 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'label': f"{module_name} (Ciclo 2 - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
                                 'module_id': module_id,
                                 'ciclo': 2,
-                                'start_date': module_data['ciclo2_inicio'],
+                                'start_date': module_data['fecha_inicio_2'],
                                 'module_name': module_name
                             })
                     except (ValueError, TypeError):
