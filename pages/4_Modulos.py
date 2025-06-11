@@ -99,8 +99,8 @@ def calculate_schedule(modules_list, initial_start_date, breaks):
         # Por lo tanto, la fecha de finalización real es un día antes de esta.
         final_end_date = current_date_for_duration - datetime.timedelta(days=1)
         
-        modules_dict[key]['ciclo1_inicio'] = current_start_c1.isoformat()
-        modules_dict[key]['ciclo1_fin'] = final_end_date.isoformat()
+        modules_dict[key]['fecha_inicio_1'] = current_start_c1.isoformat()
+        modules_dict[key]['fecha_fin_1'] = final_end_date.isoformat()
         
         # La fecha de inicio para el *siguiente* módulo en el Ciclo 1 es el día después del fin del módulo actual
         current_start_c1 = final_end_date + datetime.timedelta(days=1)
@@ -129,8 +129,8 @@ def calculate_schedule(modules_list, initial_start_date, breaks):
         
         final_end_date = current_date_for_duration - datetime.timedelta(days=1)
         
-        modules_dict[key]['ciclo2_inicio'] = current_start_c2.isoformat()
-        modules_dict[key]['ciclo2_fin'] = final_end_date.isoformat()
+        modules_dict[key]['fecha_inicio_2'] = current_start_c2.isoformat()
+        modules_dict[key]['fecha_fin_2'] = final_end_date.isoformat()
 
         # La fecha de inicio para el *siguiente* módulo en el Ciclo 2 es el día después del fin del módulo actual
         current_start_c2 = final_end_date + datetime.timedelta(days=1)
@@ -286,23 +286,56 @@ if user_email:
 
         # --- EDITOR DE DATOS (Definido antes de cualquier lógica que use su salida) ---
         df_to_edit = modules_df.copy()
-        date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
+        
+        # Mapeo de nombres de columnas viejos a nuevos
+        column_mapping = {
+            'ciclo1_inicio': 'fecha_inicio_1',
+            'ciclo1_fin': 'fecha_fin_1',
+            'ciclo2_inicio': 'fecha_inicio_2',
+            'ciclo2_fin': 'fecha_fin_2'
+        }
+        
+        # Renombrar columnas si existen
+        df_to_edit = df_to_edit.rename(columns=column_mapping)
+        
+        # Actualizar date_columns con los nuevos nombres
+        date_columns = list(column_mapping.values())
+        
         for col in date_columns:
             if col in df_to_edit.columns:
                 df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
         df_to_edit['Eliminar'] = False
         
+        # Configuración de columnas en el orden solicitado
         column_config = {
-            "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", default=False),
+            "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", default=False, width="small"),
             "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
-            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, required=True),
-            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, required=True),
-            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format="MM/DD/YYYY", disabled=True),
-            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format="MM/DD/YYYY", disabled=True),
-            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format="MM/DD/YYYY", disabled=True),
-            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format="MM/DD/YYYY", disabled=True),
-            "module_id": None, "firebase_key": None, "description": None, "created_at": None,
+            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, required=True, width="small"),
+            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, required=True, width="small"),
+            "fecha_inicio_1": st.column_config.DateColumn("Fecha Inicio 1", format="MM/DD/YYYY", disabled=True),
+            "fecha_fin_1": st.column_config.DateColumn("Fecha Fin 1", format="MM/DD/YYYY", disabled=True),
+            "fecha_inicio_2": st.column_config.DateColumn("Fecha Inicio 2", format="MM/DD/YYYY", disabled=True),
+            "fecha_fin_2": st.column_config.DateColumn("Fecha Fin 2", format="MM/DD/YYYY", disabled=True),
+            "module_id": None, "firebase_key": None, "description": None, "created_at": None, "updated_at": None,
         }
+        
+        # Ordenar las columnas según el orden deseado
+        column_order = [
+            "Eliminar", 
+            "name", 
+            "duration_weeks", 
+            "credits", 
+            "fecha_inicio_1", 
+            "fecha_fin_1", 
+            "fecha_inicio_2", 
+            "fecha_fin_2"
+        ]
+        
+        # Asegurarse de que solo se incluyan las columnas que existen en el DataFrame
+        column_order = [col for col in column_order if col in df_to_edit.columns]
+        
+        # Reordenar el DataFrame
+        df_to_edit = df_to_edit[column_order + [col for col in df_to_edit.columns if col not in column_order]]
         
         # Esta es la única fuente de verdad. Siempre es un DataFrame.
         # Usando num_rows="fixed" para evitar añadir nuevas filas
