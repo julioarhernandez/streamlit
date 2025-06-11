@@ -337,12 +337,24 @@ if user_email:
         # --- RECALCULATION UI ---
         col1, col2 = st.columns([1, 2])
         with col1:
-            program_start_date = st.date_input("Fecha de Inicio del Programa", value=datetime.date.today(), key="program_start_date")
+            # Initialize last_saved_date in session state if it doesn't exist
+            if 'last_saved_date' not in st.session_state:
+                st.session_state.last_saved_date = datetime.date.today()
+                
+            program_start_date = st.date_input(
+                "Fecha de Inicio del Programa",
+                value=st.session_state.last_saved_date,
+                key="program_start_date"
+            )
+            
+            # Check if the date has changed
+            date_changed = program_start_date != st.session_state.last_saved_date
 
         with col2:
             st.write("") # Spacer
             st.write("") # Spacer
-            if st.button("🚀 Recalcular y Guardar Fechas", type="primary", use_container_width=True):
+            # Only show the button if the date has changed
+            if date_changed and st.button("🚀 Recalcular y Guardar Fechas", type="primary", use_container_width=True):
                 with st.spinner("Calculando nuevo cronograma y guardando..."):
                     
                     # --- THE DEFINITIVE FIX ---
