@@ -283,25 +283,54 @@ if user_email:
         }
         
         # This is the single source of truth. It's ALWAYS a DataFrame.
+        # Using num_rows="fixed" to prevent adding new rows
         edited_df = st.data_editor(
             df_to_edit,
             column_config=column_config,
             hide_index=True,
-            num_rows="dynamic",
+            num_rows="fixed",  # Changed from "dynamic" to "fixed" to prevent adding new rows
             key="modules_editor_main",
             use_container_width=True,
         )
         
-        # Add Save Changes button
-        if not edited_df.equals(df_to_edit):
-            if st.button("💾 Guardar Cambios", type="primary"):
-                success, message = save_updated_modules(edited_df)
-                if success:
-                    st.success(message)
+        # Check for changes and deletions
+        has_changes = not edited_df.equals(df_to_edit)
+        rows_to_delete = edited_df[edited_df['Eliminar'] == True]
+        has_deletions = not rows_to_delete.empty
+
+        # Create columns for buttons
+        col1, col2 = st.columns([1, 3])
+        
+        # Save Changes button
+        if has_changes:
+            with col1:
+                if st.button("💾 Guardar Cambios", type="primary"):
+                    success, message = save_updated_modules(edited_df)
+                    if success:
+                        st.success(message)
+                        invalidate_cache_and_rerun()
+                    else:
+                        st.error(message)
+            
+        # Delete Confirmation button
+        if has_deletions:
+            with col2:
+                if st.button("🗑️ Confirmar Eliminación"):  # Removed type="primary"
+                    keys_to_delete = rows_to_delete['firebase_key'].tolist()
+                    deleted_count = 0
+                    with st.spinner("Eliminando módulos..."):
+                        for key in keys_to_delete:
+                            if delete_module_from_db(user_email, key):
+                                deleted_count += 1
+                    
+                    st.success(f"{deleted_count} módulo(s) eliminados. Puede recalcular las fechas para el resto.")
                     invalidate_cache_and_rerun()
-                else:
-                    st.error(message)
+        
+        # Status messages
+        if has_changes:
             st.warning("Tiene cambios sin guardar. Haga clic en 'Guardar Cambios' para guardar sus modificaciones.")
+        elif has_deletions:
+            st.warning("Ha marcado módulos para eliminar. La eliminación es permanente.")
         else:
             st.info("Realice cambios en la tabla y haga clic en 'Guardar Cambios' para guardar.")
 
@@ -355,19 +384,6 @@ if user_email:
         
         st.info("Cambie el 'Orden' o 'Semanas' y presione 'Recalcular' para actualizar.", icon="ℹ️")
 
-        # --- Deletion Logic (Also uses 'edited_df' directly) ---
-        rows_to_delete = edited_df[edited_df['Eliminar'] == True]
-        if not rows_to_delete.empty:
-            st.warning("Ha marcado módulos para eliminar. La eliminación es permanente.")
-            if st.button("Confirmar Eliminación", type="primary"):
-                keys_to_delete = rows_to_delete['firebase_key'].tolist()
-                deleted_count = 0
-                with st.spinner("Eliminando módulos..."):
-                    for key in keys_to_delete:
-                        if delete_module_from_db(user_email, key):
-                            deleted_count += 1
-                
-                st.success(f"{deleted_count} módulo(s) eliminados. Puede recalcular las fechas para el resto.")
-                invalidate_cache_and_rerun()
+        # --- Deletion Logic is now moved up with the save button ---
 else:
     st.error("Error de sesión: No se pudo obtener el email del usuario.")
