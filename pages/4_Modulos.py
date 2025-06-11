@@ -50,6 +50,88 @@ def adjust_date_for_breaks(current_date, breaks):
     # La fecha no está en vacaciones
     return current_date
 
+def count_working_days_backward(end_date_inclusive, num_working_days, breaks):
+    """
+    Cuenta `num_working_days` días hábiles hacia atrás desde `end_date_inclusive`,
+    saltándose los días de vacaciones. Retorna la fecha de inicio.
+    """
+    current_date = end_date_inclusive
+    days_counted = 0
+    
+    # Iterar hacia atrás, día a día, hasta que hayamos contado suficientes días hábiles
+    while days_counted < num_working_days:
+        # Moverse al día calendario anterior
+        current_date -= datetime.timedelta(days=1)
+        
+        # Verificar si este nuevo current_date es un día de vacaciones.
+        # Si lo es, no lo contamos y seguimos moviéndonos hacia atrás.
+        is_break_day = False
+        for b_start, b_end in breaks:
+            if b_start <= current_date <= b_end:
+                is_break_day = True
+                break
+        
+        if not is_break_day:
+            days_counted += 1 # Solo contar si es un día hábil
+            
+    return current_date
+
+def find_true_program_start_date(modules_list, desired_module_start_date, desired_module_order, breaks):
+    """
+    Calcula la fecha de inicio real del programa (módulo con orden 1)
+    dada una fecha de inicio deseada para un módulo específico y su orden.
+    """
+    if not modules_list:
+        return desired_module_start_date # Si no hay módulos, la fecha de inicio es la proporcionada
+
+    modules_sorted = sorted(
+        modules_list,
+        key=lambda x: int(x.get('credits') or 999)
+    )
+
+    pivot_module_index = -1
+    for i, mod in enumerate(modules_sorted):
+        if int(mod.get('credits') or 0) == desired_module_order:
+            pivot_module_index = i
+            break
+    
+    if pivot_module_index == -1:
+        # Si no se encuentra el orden de módulo deseado, asumir que desired_module_start_date es para el módulo 1
+        st.warning(f"No se encontró un módulo con orden '{desired_module_order}'. Asumiendo que la fecha de inicio del programa es para el primer módulo.")
+        return desired_module_start_date # Retornar la fecha proporcionada, asumiendo que es para el módulo 1
+
+    # Si el módulo pivote es el primer módulo, entonces la fecha de inicio del programa es la deseada.
+    if desired_module_order == 1:
+        return desired_module_start_date
+
+    # El inicio del módulo pivote es fijo por el usuario.
+    # El fin del módulo anterior es el día antes del inicio del módulo pivote.
+    current_end_for_prev_module = desired_module_start_date - datetime.timedelta(days=1)
+    
+    # Recorrer los módulos hacia atrás desde el módulo anterior al pivote hasta el primer módulo.
+    for i in range(pivot_module_index - 1, -1, -1): # Iterar hacia atrás desde el módulo antes del pivote
+        prev_mod_data = modules_sorted[i]
+        
+        duration_weeks_prev = int(prev_mod_data.get('duration_weeks') or 1)
+        duration_days_prev = duration_weeks_prev * 7
+
+        # Calcular la fecha de inicio del módulo anterior
+        # current_end_for_prev_module es el día *inclusive* de fin del módulo anterior.
+        calculated_start_prev = count_working_days_backward(current_end_for_prev_module, duration_days_prev, breaks)
+        
+        # Si este es el primer módulo (orden 1), hemos encontrado la fecha de inicio real del programa.
+        if int(prev_mod_data.get('credits') or 0) == 1:
+            return calculated_start_prev
+            
+        # Para la próxima iteración hacia atrás, el fin del módulo "anterior a este"
+        # será el día antes del inicio de `prev_mod_data`.
+        current_end_for_prev_module = calculated_start_prev - datetime.timedelta(days=1)
+        
+    # Si por alguna razón no se encontró el módulo 1 en el bucle (lo cual no debería ocurrir si los datos son coherentes),
+    # retornar la fecha de inicio deseada como un valor de seguridad.
+    return desired_module_start_date
+
+
 def calculate_schedule(modules_list, initial_start_date, breaks):
     """
     Calcula y retorna una nueva lista de módulos con fechas actualizadas para dos ciclos.
@@ -138,6 +220,47 @@ def calculate_schedule(modules_list, initial_start_date, breaks):
     # Retornar los módulos actualizados como una lista de diccionarios
     return list(modules_dict.values())
 
+# --- NEW FUNCTION: find_current_module_info ---
+def find_current_module_info(modules_df, today):
+    """
+    Identifica el módulo actual (si lo hay) basado en la fecha de hoy.
+    Retorna la fecha de inicio, orden, nombre y ciclo del módulo actual,
+    o None, None, None, None si no se encuentra un módulo activo.
+    """
+    current_module_start = None
+    current_module_order = None
+    current_module_name = None
+    current_cycle = None
+
+    for index, row in modules_df.iterrows():
+        # Convert dates to datetime.date objects for comparison
+        # This acts as a safeguard in case they are still strings or other types
+        fecha_inicio_1 = pd.to_datetime(row['fecha_inicio_1'], errors='coerce').date() if pd.notna(row['fecha_inicio_1']) else None
+        fecha_fin_1 = pd.to_datetime(row['fecha_fin_1'], errors='coerce').date() if pd.notna(row['fecha_fin_1']) else None
+        fecha_inicio_2 = pd.to_datetime(row['fecha_inicio_2'], errors='coerce').date() if pd.notna(row['fecha_inicio_2']) else None
+        fecha_fin_2 = pd.to_datetime(row['fecha_fin_2'], errors='coerce').date() if pd.notna(row['fecha_fin_2']) else None
+
+        # Check Cycle 1
+        if fecha_inicio_1 and fecha_fin_1: # Ensure they are valid dates
+            if fecha_inicio_1 <= today <= fecha_fin_1:
+                current_module_start = fecha_inicio_1
+                current_module_order = int(row['credits'])
+                current_module_name = row['name']
+                current_cycle = 1
+                return current_module_start, current_module_order, current_module_name, current_cycle
+        
+        # Check Cycle 2
+        if fecha_inicio_2 and fecha_fin_2: # Ensure they are valid dates
+            if fecha_inicio_2 <= today <= fecha_fin_2:
+                current_module_start = fecha_inicio_2
+                current_module_order = int(row['credits'])
+                current_module_name = row['name']
+                current_cycle = 2
+                return current_module_start, current_module_order, current_module_name, current_cycle
+                
+    return None, None, None, None
+
+
 # --- DATABASE & CACHE FUNCTIONS ---
 
 def save_new_module_to_db(user_email, module_data):
@@ -185,6 +308,12 @@ def load_modules(user_email_from_session):
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = None
+        
+        # Convert date columns to datetime.date objects here after DataFrame creation
+        date_cols_to_convert = ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
+        for col in date_cols_to_convert:
+            if col in df.columns and df[col].notna().any(): # Only convert if column exists and has non-NaN values
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
         
         # Ordenar el dataframe por 'credits' para la visualización inicial
         if 'credits' in df.columns:
@@ -238,7 +367,7 @@ with st.form("new_module_form", clear_on_submit=True):
                     # Las fechas se omiten intencionadamente; se calcularán más tarde.
                 }
                 if save_new_module_to_db(user_email, new_module_data):
-                    st.success(f"Módulo '{module_name}' agregado. Ahora puede recalcular las fechas.")
+                    st.success(f"Módulo '{module_name}' agregado. Ahora se recalcularán las fechas automáticamente.")
                     invalidate_cache_and_rerun()
                 else:
                     st.error("No se pudo guardar el módulo.")
@@ -256,6 +385,96 @@ if user_email:
     if modules_df.empty:
         st.info("No hay módulos existentes. Puede agregar uno usando el formulario de arriba.")
     else:
+        # --- Automatic Recalculation Logic ---
+        breaks = parse_breaks(breaks_list)
+        today = datetime.date.today()
+
+        # Find the current module's info
+        current_module_start, current_module_order, current_module_name, current_cycle = \
+            find_current_module_info(modules_df, today)
+
+        recalculate_needed = False
+        recalculation_reason = ""
+
+        # Get the currently stored dates from modules_df for comparison later
+        # Create a simplified DataFrame for comparison of only date columns
+        current_dates_df = modules_df[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']].copy()
+        # Convert to string to avoid issues with NaT vs None in comparison
+        for col in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+            current_dates_df[col] = current_dates_df[col].astype(str)
+
+        if current_module_start:
+            program_start_date_for_calculation = current_module_start
+            selected_module_order_for_calculation = current_module_order
+            recalculate_needed = True
+            recalculation_reason = f"El cronograma se está recalculando automáticamente basado en el módulo actual: '{current_module_name}' (Orden {current_module_order}, Ciclo {current_cycle}) que inició el {current_module_start.strftime('%Y-%m-%d')}."
+        elif not modules_df.empty and not current_module_start:
+            program_start_date_for_calculation = today
+            selected_module_order_for_calculation = modules_df['credits'].min()
+            recalculate_needed = True
+            recalculation_reason = f"No se detectó un módulo activo hoy. Recalculando el cronograma asumiendo que el Módulo '{modules_df[modules_df['credits'] == selected_module_order_for_calculation]['name'].iloc[0]}' (Orden {selected_module_order_for_calculation}) comienza hoy."
+        else:
+            recalculate_needed = False
+
+        if recalculate_needed:
+            st.info(recalculation_reason, icon="ℹ️")
+            with st.spinner("Calculando nuevo cronograma..."):
+                modules_list_for_calc = modules_df.to_dict('records')
+
+                true_start_date_for_program = find_true_program_start_date(
+                    modules_list_for_calc,
+                    program_start_date_for_calculation,
+                    selected_module_order_for_calculation,
+                    breaks
+                )
+                
+                updated_modules_with_dates_list = calculate_schedule(
+                    modules_list_for_calc,
+                    true_start_date_for_program,
+                    breaks
+                )
+                
+                # Convert the calculated list back to a DataFrame for comparison
+                # Ensure the same columns and types are used for accurate comparison
+                calculated_df_temp = pd.DataFrame(updated_modules_with_dates_list)
+                # Select only the date columns for comparison, and ensure 'firebase_key' is present
+                calculated_df_compare = calculated_df_temp[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']].copy()
+                # Convert to string to avoid issues with NaT vs None in comparison
+                for col in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+                    calculated_df_compare[col] = calculated_df_compare[col].astype(str)
+                
+                # Merge with current_dates_df to compare dates for the same firebase_key
+                merged_df = pd.merge(current_dates_df, calculated_df_compare, on='firebase_key', suffixes=('_current', '_calc'), how='left')
+                
+                # Identify if any date column has changed
+                dates_have_changed = False
+                for col_name in ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']:
+                    if not merged_df[f"{col_name}_current"].equals(merged_df[f"{col_name}_calc"]):
+                        dates_have_changed = True
+                        break
+
+                if dates_have_changed:
+                    update_payload = {}
+                    for mod in updated_modules_with_dates_list:
+                        firebase_key = mod.get('firebase_key')
+                        if firebase_key:
+                            mod_to_save = {key: value for key, value in mod.items() if key != 'Eliminar' and pd.notna(value)}
+                            update_payload[firebase_key] = mod_to_save
+
+                    if update_payload:
+                        try:
+                            user_path = user_email.replace('.', ',')
+                            db.child("modules").child(user_path).update(update_payload)
+                            st.success("¡Cronograma recalculado y guardado exitosamente!")
+                            time.sleep(1)
+                            invalidate_cache_and_rerun() # Rerun to display updated data
+                        except Exception as e:
+                            st.error(f"Error al guardar el cronograma actualizado: {e}")
+                    else:
+                        st.warning("No se encontraron módulos con fechas para actualizar.")
+                else:
+                    st.info("Las fechas ya están actualizadas. No se requiere guardar el cronograma.")
+        
         st.subheader("Módulos Existentes y Planificación")
 
         # --- FUNCIÓN PARA GUARDAR MÓDULOS ACTUALIZADOS ---
@@ -297,7 +516,7 @@ if user_email:
         # Define the date columns directly with the desired names
         date_columns = ['fecha_inicio_1', 'fecha_fin_1', 'fecha_inicio_2', 'fecha_fin_2']
         
-        # Convertir las columnas de fecha a tipo datetime.date para el data_editor
+        # Convertir las columnas de fecha a tipo datetime.date para el data_editor (ya se hizo en load_modules, pero es una doble verificación)
         for col in date_columns:
             if col in df_to_edit.columns:
                 try:
@@ -378,7 +597,7 @@ if user_email:
                             if delete_module_from_db(user_email, key):
                                 deleted_count += 1
                     
-                    st.success(f"{deleted_count} módulo(s) eliminados. Puede recalcular las fechas para el resto.")
+                    st.success(f"{deleted_count} módulo(s) eliminados. Se recalculará el cronograma automáticamente.")
                     invalidate_cache_and_rerun()
         
         # Mensajes de estado
@@ -389,62 +608,9 @@ if user_email:
         else:
             st.info("Realice cambios en la tabla y haga clic en 'Guardar Cambios' para guardar.")
 
-        # --- UI DE RECALCULACIÓN ---
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            # Inicializar last_saved_date en session state si no existe
-            if 'last_saved_date' not in st.session_state:
-                st.session_state.last_saved_date = datetime.date.today()
-                
-            program_start_date = st.date_input(
-                "Fecha de Inicio del Programa",
-                value=st.session_state.last_saved_date,
-                key="program_start_date"
-            )
-            
-            # Verificar si la fecha ha cambiado
-            date_changed = program_start_date != st.session_state.last_saved_date
+        # --- Se elimina la UI de Recalculación Manual ---
+        st.info("El cronograma de módulos se recalcula automáticamente al cargar la página o al agregar/eliminar módulos, basándose en la fecha actual y el módulo activo.", icon="💡")
 
-        with col2:
-            st.write("") # Espaciador
-            st.write("") # Espaciador
-            # Mostrar el botón solo si la fecha ha cambiado
-            if date_changed and st.button("🚀 Recalcular y Guardar Fechas", type="primary", use_container_width=True):
-                with st.spinner("Calculando nuevo cronograma y guardando..."):
-                    
-                    modules_from_editor = edited_df.to_dict('records')
-
-                    current_modules = [mod for mod in modules_from_editor if isinstance(mod, dict) and mod.get('firebase_key')]
-
-                    if not current_modules:
-                        st.warning("No hay módulos existentes para calcular.")
-                    else:
-                        breaks = parse_breaks(breaks_list)
-                        updated_modules_with_dates = calculate_schedule(current_modules, program_start_date, breaks)
-                        
-                        if updated_modules_with_dates:
-                            update_payload = {}
-                            for mod in updated_modules_with_dates:
-                                firebase_key = mod.get('firebase_key')
-                                if firebase_key:
-                                    # Sanitizar el diccionario para eliminar NaNs antes de guardar
-                                    mod_to_save = {key: value for key, value in mod.items() if key != 'Eliminar' and pd.notna(value)}
-                                    update_payload[firebase_key] = mod_to_save
-
-                            if update_payload:
-                                try:
-                                    user_path = user_email.replace('.', ',')
-                                    db.child("modules").child(user_path).update(update_payload)
-                                    st.success("¡Cronograma recalculado y guardado exitosamente!")
-                                    time.sleep(1)
-                                    invalidate_cache_and_rerun()
-                                except Exception as e:
-                                    st.error(f"Error al guardar el cronograma actualizado: {e}")
-                            else:
-                                st.warning("No se encontraron módulos existentes para actualizar.")
-                        else:
-                            st.warning("No se pudieron calcular las fechas del cronograma.")
-        
 
 else:
     st.error("Error de sesión: No se pudo obtener el email del usuario.")
