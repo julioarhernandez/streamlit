@@ -179,12 +179,29 @@ def add_break_form():
         key="break_name_input"
     )
     
-    # Date input for the start date
+    # Adjust start date to be Monday if it's not already
+    def get_next_monday(date):
+        days_ahead = 0 - date.weekday()  # Monday is 0, Sunday is 6
+        if days_ahead < 0:  # If today is not Monday
+            days_ahead += 7  # Go to next Monday
+        return date + datetime.timedelta(days=days_ahead)
+    
+    # Default to next Monday if no date is set
+    default_date = get_next_monday(datetime.date.today())
+    
+    # Date input for the start date (always Monday)
     start_date = col2.date_input(
         "Fecha de Inicio",
-        value=st.session_state.add_break_start_date,
+        value=default_date if st.session_state.add_break_start_date.weekday() != 0 
+              else st.session_state.add_break_start_date,
         key="break_start_date_input"
     )
+    
+    # Show warning if selected date is not Monday
+    if start_date.weekday() != 0:  # 0 is Monday
+        next_monday = get_next_monday(start_date)
+        st.warning(f"La fecha de inicio debe ser un lunes. Se usará el lunes {next_monday.strftime('%Y-%m-%d')}.")
+        start_date = next_monday
     
     # Number input for duration in weeks
     duration_weeks = col3.number_input(
@@ -196,14 +213,20 @@ def add_break_form():
     )
     
     # Calculate and display the date range dynamically.
-    # This caption will update immediately because start_date and duration_weeks
-    # now directly reflect the current widget values on each re-run.
-    end_date_display = start_date + datetime.timedelta(weeks=duration_weeks)
+    # End date is always Sunday (6 days after start of the last week)
+    end_date_display = start_date + datetime.timedelta(weeks=duration_weeks, days=-1)  # Sunday of the last week
     st.caption(f"Período: {date_format(start_date, "%Y/%m/%d")} al {date_format(end_date_display, "%Y/%m/%d")}")
     
     # Regular Streamlit button for saving data.
     # This will trigger a re-run and the logic below.
     if st.button("Guardar Semana de Descanso"):
+        # Validate that start date is a Monday (0 = Monday, 6 = Sunday)
+        if start_date.weekday() != 0:
+            st.error("Error: La fecha de inicio debe ser un lunes.")
+            st.warning(f"La fecha seleccionada ({start_date.strftime('%A %Y-%m-%d')}) no es un lunes. "
+                     f"Por favor, seleccione un lunes como fecha de inicio.")
+            return None
+            
         if not name:
             st.error("El nombre es obligatorio.")
             return None 
