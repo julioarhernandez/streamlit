@@ -4,7 +4,54 @@ import pandas as pd
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
 import datetime # Added for type hinting and date operations
 
-def get_students_by_email(email):
+def admin_get_last_updated(table_name, course_email):
+    """
+    Fetch the last_updated timestamp for a given table from Firebase metadata.
+    
+    Args:
+        table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+    
+    Returns:
+        str or None: The last_updated ISO timestamp, or None if not found.
+    """
+    if user_email:
+        user_email = user_email.replace('.', ',')
+        ref = db.child("metadata").child(table_name).child(user_email)
+        snapshot = ref.get()
+        if snapshot.val() is not None:
+            metadata = snapshot.val()
+        else:
+            return None
+    else:
+        metadata = db.child("metadata").child(table_name).get().val()
+    if metadata and 'last_updated' in metadata:
+        return metadata['last_updated']
+    else:
+        return None
+        
+def admin_set_last_updated(table_name, course_email):
+    """
+    Update the last_updated timestamp for a given table in Firebase metadata to current UTC time.
+    
+    Args:
+        table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+    
+    Returns:
+        str: The new last_updated ISO timestamp.
+    """
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if user_email:
+        user_email = user_email.replace('.', ',')
+        db.child("metadata").child(table_name).child(user_email).update({
+            'last_updated': now_iso
+        })
+    else:
+        db.child("metadata").child(table_name).update({
+            'last_updated': now_iso
+        })
+    return now_iso
+    
+def admin_get_students_by_email(email):
     """
     Retrieves student records from the database based on the provided email.
     This function is designed for a database structure where the email
@@ -61,7 +108,7 @@ def get_students_by_email(email):
         return {}
 
 @st.cache_data
-def get_student_group_emails():
+def admin_get_student_group_emails():
     """
     Retrieves the top-level email keys (representing student groups)
     from the 'students' node in the database.
@@ -91,3 +138,160 @@ def get_student_group_emails():
         print(f"Error retrieving student group emails: {str(e)}")
         return []
     
+@st.cache_data
+def admin_load_students(course_email):
+    """
+    Load students data from Firebase and ensure all required fields are present.
+    
+    Returns:
+        tuple: (DataFrame with student data, filename) or (None, None) if error or no data
+    """
+    try:
+        user_email = course_email
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        data = db.child("students").child(user_email).get().val()
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---data from firebase----\n", data)
+
+        if not data or 'data' not in data:
+            return None, None
+            
+        # Create DataFrame from records
+        df = pd.DataFrame(data['data'])
+        
+        # Normalize column names
+        df.columns = df.columns.str.lower().str.strip()
+        
+        # Ensure required columns exist
+        if 'nombre' not in df.columns:
+            st.error("Error: El archivo debe contener una columna 'nombre'")
+            return None, None
+            
+        # Clean and standardize data
+        df['nombre'] = df['nombre'].astype(str).str.strip()
+        
+        # Initialize optional fields if they don't exist
+        optional_fields = {
+            'email': '',
+            'canvas_id': '',
+            'telefono': '',
+            'modulo': '',
+            'ciclo': '',
+            'fecha_inicio': None
+        }
+        
+        for field, default_value in optional_fields.items():
+            if field not in df.columns:
+                df[field] = default_value
+            else:
+                # Clean up the data
+                if field == 'fecha_inicio' and pd.api.types.is_datetime64_any_dtype(df[field]):
+                    # Convert datetime to string for consistency
+                    df[field] = pd.to_datetime(df[field]).dt.strftime('%Y-%m-%d')
+                else:
+                    df[field] = df[field].fillna(default_value if default_value is not None else '').astype(str).str.strip()
+        
+        # Reorder columns for consistency
+        column_order = ['nombre', 'email', 'canvas_id', 'telefono', 'modulo', 'fecha_inicio', 'ciclo']
+        df = df[[col for col in column_order if col in df.columns] + 
+                [col for col in df.columns if col not in column_order]]
+        
+        return df, data.get('filename', 'students.xlsx')
+        
+    except Exception as e:
+        st.error(f"Error loading students: {str(e)}")
+        return None, None
+
+def admin_save_students(students_df):
+    """
+    Save students data to Firebase with proper handling of all fields.
+    
+    Args:
+        students_df (DataFrame): DataFrame containing student records
+        
+    Returns:
+        bool: True if save was successful, False otherwise
+    """
+    try:
+        if students_df is None or students_df.empty:
+            st.warning("No student data to save.")
+            return False
+            
+        user_email = st.session_state.email.replace('.', ',')
+        
+        # Create a working copy to avoid modifying the original
+        df = students_df.copy()
+        
+        # Ensure required columns exist
+        if 'nombre' not in df.columns:
+            st.error("Error: Student data must contain a 'nombre' column")
+            return False
+            
+        # Initialize optional fields if they don't exist
+        optional_fields = {
+            'email': '',
+            'canvas_id': '',
+            'telefono': '',
+            'modulo': '',
+            'ciclo': '',
+            'fecha_inicio': None
+        }
+        
+        for field, default_value in optional_fields.items():
+            if field not in df.columns:
+                df[field] = default_value
+        
+        # Clean and standardize data
+        df['nombre'] = df['nombre'].astype(str).str.strip()
+        
+        # Convert data types and ensure JSON serialization
+        for col in df.columns:
+            # Handle numeric types
+            if pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].astype('object').where(df[col].notna(), None)
+            # Handle datetime types
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d')
+            # Handle string types
+            else:
+                df[col] = df[col].fillna('').astype(str).str.strip()
+        
+        # Convert to records and ensure all values are JSON-serializable
+        records = []
+        for _, row in df.iterrows():
+            record = {}
+            for key, value in row.items():
+                if pd.isna(value) or value is None or value == '':
+                    record[key] = None
+                else:
+                    record[key] = str(value) if not isinstance(value, (int, float, bool, str)) else value
+            records.append(record)
+        
+        # Prepare data for Firebase
+        data = {
+            'filename': 'students.xlsx',
+            'data': records,
+            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+            'metadata': {
+                'version': '1.0',
+                'fields': list(df.columns),
+                'record_count': len(df)
+            }
+        }
+        
+        # Save to Firebase with error handling
+        try:
+            db.child("students").child(user_email).set(data)
+            st.success(f"Successfully saved {len(df)} student records.")
+            set_last_updated('students')
+            return True
+        except Exception as firebase_error:
+            st.error(f"Firebase error: {str(firebase_error)}")
+            return False
+            
+    except Exception as e:
+        st.error(f"Error saving students: {str(e)}")
+        if 'df' in locals():
+            st.error(f"Columns in DataFrame: {', '.join(df.columns)}")
+        return False

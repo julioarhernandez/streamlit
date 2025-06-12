@@ -3,8 +3,8 @@ import pandas as pd
 import datetime
 import urllib.parse
 from config import setup_page
-from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
-from utils_admin import get_students_by_email, get_student_group_emails
+from utils import get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
+from utils_admin import admin_get_students_by_email, admin_get_student_group_emails, admin_load_students, admin_save_students
 
 def create_whatsapp_link(phone: str) -> str:
     if pd.isna(phone) or not str(phone).strip():
@@ -27,19 +27,12 @@ if not st.session_state.get('logged_in', False):
 # Setup page title (now that config is done and user is logged in)
 setup_page("Gestión de Estudiantes por Administrador")
 
-# Load current students to display count
-students_last_updated = get_last_updated('students')
-df_loaded, _ = load_students(students_last_updated)
-
-if df_loaded is not None and not df_loaded.empty:
-    st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
-    st.divider()
 
 # --- Select Course ---
 st.subheader("1. Seleccionar Curso")
 
 # Get available courses (emails)
-course_emails = get_student_group_emails()
+course_emails = admin_get_student_group_emails()
 
 if course_emails:
     full_emails_for_options = course_emails.copy() # Good practice to copy if you modify original later
@@ -119,6 +112,10 @@ with tab2:
     )
     submit_add_students_text = st.button("Agregar Estudiantes")
 
+# Load current students to display count
+# students_last_updated = get_last_updated('students')
+df_loaded, _ = admin_load_students(selected_course)
+
 if uploaded_file is not None:
     try:
         # Read the uploaded file
@@ -184,9 +181,9 @@ if uploaded_file is not None:
             st.dataframe(df_upload)
             
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)"):
-                if save_students(df_upload):
+                if admin_save_students(df_upload):
                     st.success("¡Datos de estudiantes del archivo guardados exitosamente! La lista existente fue reemplazada.")
-                    set_last_updated('students')
+                    # set_last_updated('students')
                     st.rerun()
     
     except Exception as e:
@@ -252,7 +249,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
-                    'modulo': get_module_name_by_id(user_email, st.session_state.selected_module_id) or '',
+                    'modulo': get_module_name_by_id(selected_course, st.session_state.selected_module_id) or '',
                     'ciclo': st.session_state.selected_module.get('ciclo', ''),
                     'modulo_id': st.session_state.selected_module_id  # Store the Firebase key as modulo_id
                 }
@@ -306,8 +303,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 new_students_df = pd.DataFrame(students_to_add_list)
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
                 
-                if save_students(updated_students_df):
-                    set_last_updated('students')
+                if admin_save_students(updated_students_df):
+                    # set_last_updated('students')
                     st.success(f"¡{added_count} estudiante(s) agregado(s) exitosamente!")
                     if skipped_names:
                         st.caption(f"Nombres omitidos (ya existen o duplicados en la entrada): {', '.join(skipped_names)}")
@@ -316,10 +313,11 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     st.error("Error al agregar estudiantes desde el área de texto.")
 
 
+# ---- Section Students --- 
 
-
-# Rest of the file remains the same...
-st.divider()
+if df_loaded is not None and not df_loaded.empty:
+    st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
+    st.divider()
 
 st.subheader(f"Estudiantes Actuales en el curso {selected_course.capitalize().split('@')[0]} (Total: {len(df_loaded) if df_loaded is not None else 0})")
 
@@ -342,7 +340,7 @@ if df_loaded is not None and not df_loaded.empty:
         # Update module names using modulo_id
         for idx, row in df_display.iterrows():
             if pd.notna(row.get('modulo_id')) and row['modulo_id']:
-                module_name = get_module_name_by_id(user_email, str(row['modulo_id']))
+                module_name = get_module_name_by_id(selected_course, str(row['modulo_id']))
                 print("\n module name returned", module_name)
                 if module_name:
                     df_display.at[idx, 'modulo'] = module_name
@@ -464,8 +462,8 @@ if df_loaded is not None and not df_loaded.empty:
                     updated_df.at[original_idx, 'nombre'] = row['nombre']
                 
                 # Save the updated dataframe
-                if save_students(updated_df):
-                    set_last_updated('students')
+                if admin_save_students(updated_df):
+                    # set_last_updated('students')
                     st.success("¡Cambios guardados exitosamente!")
                     # Add a button to refresh the page to see changes
                     if st.button("Actualizar página"):
@@ -491,8 +489,8 @@ if df_loaded is not None and not df_loaded.empty:
                         ~current_students_df_from_db['nombre'].astype(str).str.lower().str.strip().isin(normalized_names_to_delete)
                     ]
                     
-                    if save_students(students_to_keep_df):
-                        set_last_updated('students')
+                    if admin_save_students(students_to_keep_df):
+                        # set_last_updated('students')
                         st.success(f"¡{len(names_to_delete)} estudiante(s) eliminado(s) exitosamente!")
                         st.rerun()
                     else:
