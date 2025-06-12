@@ -320,7 +320,8 @@ if df_loaded is not None and not df_loaded.empty:
                 help="Seleccione estudiantes para eliminar",
                 default=False,
                 width="small",
-                required=True
+                required=True,
+                pinned=True
             ),
             "nombre": st.column_config.TextColumn(
                 "Nombre del Estudiante",
