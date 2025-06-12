@@ -303,11 +303,12 @@ if df_loaded is not None and not df_loaded.empty:
         if 'Eliminar' not in df_display.columns:
             df_display.insert(0, 'Eliminar', False)
         
-        # Define column order with all possible columns
+        # Define column order with all possible columns (excluding hidden ones)
         all_columns = ['Eliminar', 'nombre', 'email', 'canvas_id', 'telefono', 
-                      'fecha_inicio', 'modulo', 'ciclo', 'modulo_id']
-        # Only include columns that exist in the dataframe
-        column_order = [col for col in all_columns if col in df_display.columns]
+                     'fecha_inicio', 'modulo']
+        # Only include columns that exist in the dataframe and are not hidden
+        hidden_columns = ['ciclo', 'modulo_id']
+        column_order = [col for col in all_columns if col in df_display.columns and col not in hidden_columns]
         
         # Make a copy of the dataframe for editing
         editable_df = df_display[column_order].copy()
@@ -348,12 +349,8 @@ if df_loaded is not None and not df_loaded.empty:
                 disabled=True,
                 width="small"
             ),
-            "modulo_id": st.column_config.TextColumn(
-                "ID del Módulo",
-                help="ID del módulo en Firebase",
-                disabled=True,
-                width="small"
-            ),
+            # Hidden columns are not included in the column_order list
+            "modulo_id": None,
             "fecha_inicio": st.column_config.DateColumn(
                 "Fecha de Inicio",
                 help="Fecha de inicio en el módulo",
@@ -361,12 +358,8 @@ if df_loaded is not None and not df_loaded.empty:
                 disabled=True,
                 width="small"
             ),
-            "ciclo": st.column_config.TextColumn(
-                "Ciclo",
-                help="Ciclo actual del estudiante",
-                disabled=True,
-                width="small"
-            )
+            # Hidden columns are not included in the column_order list
+            "ciclo": None
         }
         
         # Only include columns that exist in the dataframe
