@@ -1,8 +1,20 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import urllib.parse
 from config import setup_page
 from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
+
+def create_whatsapp_link(phone: str) -> str:
+    if pd.isna(phone) or not str(phone).strip():
+        return ""
+    phone = ''.join(filter(str.isdigit, str(phone)))
+    return f"https://wa.me/{phone}" if phone else ""
+
+def create_teams_link(email: str) -> str:
+    if pd.isna(email) or not str(email).strip() or '@' not in str(email):
+        return ""
+    return f"https://teams.microsoft.com/l/chat/0/0?users={email}"
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -165,8 +177,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             if current_students_df is None:
                 # Initialize with all required and optional columns
                 current_students_df = pd.DataFrame(columns=[
-                    'nombre', 'email', 'canvas_id', 'telefono', 'fecha_inicio',
-                    'modulo', 'ciclo', 'modulo_id'
+                    'nombre', 'email', 'canvas_id', 'telefono', 
+                    'whatsapp', 'teams', 'fecha_inicio', 'modulo', 'ciclo', 'modulo_id'
                 ])
                 
                 # Ensure all columns exist with proper types
@@ -288,9 +300,10 @@ if df_loaded is not None and not df_loaded.empty:
         if 'modulo_id' not in df_display.columns:
             df_display['modulo_id'] = ''
             
-        # Ensure modulo column exists
-        if 'modulo' not in df_display.columns:
-            df_display['modulo'] = ''
+        # Ensure all required columns exist
+        for col in ['modulo', 'whatsapp', 'teams']:
+            if col not in df_display.columns:
+                df_display[col] = ''
         
         # Update module names using modulo_id
         for idx, row in df_display.iterrows():
@@ -302,16 +315,30 @@ if df_loaded is not None and not df_loaded.empty:
         
         if 'Eliminar' not in df_display.columns:
             df_display.insert(0, 'Eliminar', False)
-        
+            
         # Define column order with all possible columns (excluding hidden ones)
         all_columns = ['Eliminar', 'nombre', 'email', 'canvas_id', 'telefono', 
-                     'fecha_inicio', 'modulo']
-        # Only include columns that exist in the dataframe and are not hidden
+                     'whatsapp', 'teams', 'fecha_inicio', 'modulo']
+        
+        # Ensure all columns exist in the DataFrame
+        for col in all_columns:
+            if col not in df_display.columns:
+                df_display[col] = ''
+                
+        # Define hidden columns
         hidden_columns = ['ciclo', 'modulo_id']
-        column_order = [col for col in all_columns if col in df_display.columns and col not in hidden_columns]
+        
+        # Create column order, ensuring all requested columns are included
+        column_order = [col for col in all_columns if col not in hidden_columns]
         
         # Make a copy of the dataframe for editing
         editable_df = df_display[column_order].copy()
+        
+        # Generate links
+        if 'telefono' in editable_df.columns:
+            editable_df['whatsapp'] = editable_df['telefono'].apply(create_whatsapp_link)
+        if 'email' in editable_df.columns:
+            editable_df['teams'] = editable_df['email'].apply(create_teams_link)
         
         # Define column configurations
         column_config = {
@@ -341,8 +368,20 @@ if df_loaded is not None and not df_loaded.empty:
             ),
             "telefono": st.column_config.TextColumn(
                 "Teléfono",
-                help="Número de teléfono",
+                help="Número de teléfono principal",
                 width="small"
+            ),
+            "whatsapp": st.column_config.LinkColumn(
+                "WhatsApp",
+                help="Contactar por WhatsApp",
+                width="small",
+                display_text="💬"
+            ),
+            "teams": st.column_config.LinkColumn(
+                "Teams",
+                help="Contactar por Teams",
+                width="small",
+                display_text="💻"
             ),
             "modulo": st.column_config.TextColumn(
                 "Módulo",
