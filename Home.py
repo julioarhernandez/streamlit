@@ -7,14 +7,7 @@ import streamlit as st
 #     layout="centered"
 # )
 
-if not st.session_state.get('logged_in', False):
-    pages = {
-        "Inicio": [
-            st.Page("Login.py", title="Login")
-        ]
-    }
-
-if st.session_state.admin:
+if st.session_state.get('admin', True):
     pages = {
         "Inicio": [
             st.Page("Login.py", title="Login")
@@ -43,6 +36,13 @@ else:
         ],
     }
 
+if not st.session_state.get('logged_in', False):
+    pages = {
+        "Inicio": [
+            st.Page("Login.py", title="Login")
+        ]
+    }
+
 pg = st.navigation(pages)
 pg.run()
 
@@ -50,3 +50,5 @@ pg.run()
 
     # When logged in, pages from the 'pages' directory will appear in the sidebar.
     # Ensure those pages have a login check.
+
+

@@ -18,7 +18,7 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.email = user['email']
         st.session_state.user_token = user['idToken'] # Store the token
-        if 'julio' in email.lower():
+        if 'admin' in email.lower():
             st.session_state.admin = True
         else:
             st.session_state.admin = False

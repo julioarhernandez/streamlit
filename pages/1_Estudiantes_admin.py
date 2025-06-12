@@ -4,6 +4,7 @@ import datetime
 import urllib.parse
 from config import setup_page
 from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
+from utils_admin import get_students_by_email, get_student_group_emails
 
 def create_whatsapp_link(phone: str) -> str:
     if pd.isna(phone) or not str(phone).strip():
@@ -34,8 +35,29 @@ if df_loaded is not None and not df_loaded.empty:
     st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
     st.divider()
 
+# --- Select Course ---
+st.subheader("1. Seleccionar Curso")
+
+# Get available courses (emails)
+course_emails = get_student_group_emails()
+
+if course_emails:
+    # Create a mapping of display names to emails for better UX
+    course_emails = [email.capitalize().split('@')[0] for email in course_emails]
+    course_options = {email: f"Curso: {email}" for email in course_emails}
+    
+    selected_course = st.selectbox(
+        "Seleccione un Curso para agregar a los nuevos estudiantes:",
+        options=course_emails,
+        format_func=lambda x: course_options[x],
+        index=0
+    )
+else:
+    st.warning("No se encontraron cursos disponibles.")
+    selected_course = None
+
 # --- Select Module ---
-st.subheader("1. Seleccionar Módulo")
+st.subheader("2. Seleccionar Módulo")
 
 try:
     user_email = st.session_state.get('email', '').replace('.', ',')
@@ -62,7 +84,7 @@ except Exception as e:
     st.error(f"Error al cargar los módulos: {str(e)}")
 
 st.divider()
-st.subheader("2. Agregar Estudiantes")
+st.subheader("3. Agregar Estudiantes")
 
 # Create tabs for different input methods
 tab1, tab2 = st.tabs(["📤 Subir Archivo", "✏️ Ingresar Texto"])
@@ -283,6 +305,9 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     st.rerun()
                 else:
                     st.error("Error al agregar estudiantes desde el área de texto.")
+
+
+
 
 # Rest of the file remains the same...
 st.divider()
