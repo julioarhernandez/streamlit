@@ -30,7 +30,7 @@ st.subheader("1. Seleccionar Módulo")
 # Load available modules using the utility function
 try:
     user_email = st.session_state.get('email', '').replace('.', ',')
-    modules_last_updated = get_last_updated('modules')
+    modules_last_updated = get_last_updated('modules', user_email)
     module_options = get_available_modules(user_email, modules_last_updated)
     
     if module_options:

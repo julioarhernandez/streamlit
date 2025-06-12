@@ -5,6 +5,7 @@ import time
 import math
 import uuid
 from config import setup_page, db
+from utils import set_last_updated  
 
 # --- Page Setup and Login Check ---
 setup_page("Gestión de Módulos")
@@ -227,6 +228,7 @@ def save_new_module_to_db(user_email, module_data):
     try:
         user_email_sanitized = user_email.replace('.', ',')
         db.child("modules").child(user_email_sanitized).push(module_data)
+        set_last_updated('modules', user_email)
         return True
     except Exception as e:
         st.error(f"Error al guardar el módulo en Firebase: {e}")
@@ -238,6 +240,7 @@ def delete_module_from_db(user_email, module_key):
     try:
         user_path = user_email.replace('.', ',')
         db.child("modules").child(user_path).child(module_key).remove()
+        set_last_updated('modules', user_email)
         st.toast("✅ Módulo eliminado de la base de datos.")
         return True
     except Exception as e:
@@ -471,6 +474,7 @@ if user_email:
                 if update_payload:
                     user_path = user_email.replace('.', ',')
                     db.child("modules").child(user_path).update(update_payload)
+                    set_last_updated('modules', user_email)
                     return True, "¡Cambios guardados exitosamente!"
                 return False, "No hay cambios para guardar."
             except Exception as e:
