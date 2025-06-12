@@ -47,26 +47,6 @@ def save_break(break_id, break_data):
         st.error(f"Error al guardar la semana de descanso: {e}")
         return False
 
-def delete_break(break_id):
-    """
-    Deletes a specific break record from the Firebase Realtime Database.
-    'break_id' is the unique key of the break to be deleted.
-    """
-    try:
-        # Create a fresh reference to the specific break to be removed
-        break_ref = db.child("breaks").child(break_id)
-        
-        # Verify the break exists before attempting to remove it
-        if break_ref.get().val() is not None:
-            break_ref.remove() # Remove the data
-            return True
-        else:
-            st.warning(f"La semana de descanso con ID '{break_id}' no se encontró.")
-            return False
-    except Exception as e:
-        st.error(f"Error al eliminar la semana de descanso: {e}")
-        return False
-
 # --- UI Components ---
 
 def display_breaks_table(breaks_data):
@@ -76,7 +56,7 @@ def display_breaks_table(breaks_data):
     """
     if not breaks_data:
         st.info("No hay semanas de descanso configuradas.")
-        return
+        return []
     
     breaks_list = []
     for break_id, break_info in breaks_data.items():
@@ -98,30 +78,75 @@ def display_breaks_table(breaks_data):
             
             breaks_list.append({
                 'ID': break_id,
+                'Eliminar': False,  # Add checkbox column
                 'Nombre': break_info.get('name', ''),
-                'Fecha Inicio': start_date.strftime('%Y-%m-%d') if start_date else 'N/A',
                 'Duración (semanas)': duration_weeks,
-                'Fecha Fin': end_date.strftime('%Y-%m-%d') if end_date else 'N/A'
+                'Fecha Inicio': date_format(start_date, "%Y/%m/%d") if start_date else 'N/A',
+                'Fecha Fin': date_format(end_date, "%Y/%m/%d") if end_date else 'N/A',
+                'start_date_obj': start_date  # Store as date object for sorting
             })
     
     if not breaks_list:
         st.info("No hay semanas de descanso configuradas.")
-        return
+        return []
     
+    # Sort by start date (most recent first)
+    breaks_list.sort(key=lambda x: x['start_date_obj'] or datetime.date.min, reverse=True)
+    
+    # Create DataFrame
     df = pd.DataFrame(breaks_list)
-    st.dataframe(
+    
+    # Reorder columns for display - 'Semanas' before 'Inicio'
+    column_order = ['Eliminar', 'Nombre', 'Duración (semanas)', 'Fecha Inicio', 'Fecha Fin', 'ID']
+    df = df[[col for col in column_order if col in df.columns]]
+    
+    # Display the DataFrame with checkboxes
+    edited_df = st.data_editor(
         df,
         column_config={
+            'Eliminar': st.column_config.CheckboxColumn(
+                "Eliminar",
+                help="Seleccione para eliminar",
+                default=False,
+                width="small",
+                pinned=True
+            ),
             'ID': None,  # Hide the internal ID column
             'Nombre': 'Nombre',
             'Fecha Inicio': 'Inicio',
+            'Fecha Fin': 'Fin',
             'Duración (semanas)': 'Semanas',
-            'Fecha Fin': 'Fin'
+            'start_date_obj': None  # Hide the sort helper column
         },
-        hide_index=True,  # Hide pandas DataFrame index
-        use_container_width=True, # Make dataframe occupy full width
-        column_order=['Nombre', 'Fecha Inicio', 'Duración (semanas)', 'Fecha Fin']
+        hide_index=True,
+        use_container_width=True,
+        disabled=['ID', 'Nombre', 'Fecha Inicio', 'Duración (semanas)', 'Fecha Fin']
     )
+    
+    # Check for breaks selected for deletion
+    if 'delete_breaks' not in st.session_state:
+        st.session_state.delete_breaks = False
+    
+    # Show delete button if any breaks are selected
+    breaks_to_delete = edited_df[edited_df['Eliminar']]
+    if not breaks_to_delete.empty:
+        st.warning(f"Se eliminarán {len(breaks_to_delete)} semana(s) de descanso. Esta acción no se puede deshacer.")
+        
+        if st.button("⚠️ Confirmar eliminación"):
+            success_count = 0
+            for _, row in breaks_to_delete.iterrows():
+                try:
+                    # Create a fresh reference for each deletion to avoid path issues
+                    db.child("breaks").child(row['ID']).remove()
+                    success_count += 1
+                except Exception as e:
+                    st.error(f"Error al eliminar la semana de descanso '{row['Nombre']}': {str(e)}")
+            
+            if success_count > 0:
+                st.success(f"Se eliminaron {success_count} semana(s) de descanso correctamente.")
+                st.rerun()
+    
+    return breaks_list
 
 def add_break_form():
     """
@@ -212,69 +237,26 @@ def main():
     Estas fechas se utilizarán para saltar días no hábiles en los cálculos de programación.
     """)
     
-    # Load existing breaks data from the database
+    # Add new break form at the top
+    break_data = add_break_form()
+    
+    if break_data:
+        # Generate a unique ID for the new break based on current timestamp
+        break_id = f"break_{datetime.datetime.now().strftime('%Y%m%d%H%M%S_%f')}" # Added microsecond for more uniqueness
+        
+        # Save the new break to Firebase
+        try:
+            db.child("breaks").child(break_id).set(break_data)
+            st.success("¡Semana de descanso agregada exitosamente!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error al guardar la semana de descanso: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Load and display existing breaks
     breaks_data = load_breaks()
-    
-    # Display the table of configured break weeks
-    st.subheader("Semanas de Descanso Configuradas")
     display_breaks_table(breaks_data)
-    
-    # Section to add a new break, wrapped in an expander
-    with st.expander("Agregar Nueva Semana de Descanso", expanded=False):
-        # Call the form function to get submitted data.
-        # This will return data only when the "Guardar Semana de Descanso" button is pressed.
-        break_data = add_break_form() 
-        if break_data:
-            # Generate a unique ID for the new break based on current timestamp
-            break_id = f"break_{datetime.datetime.now().strftime('%Y%m%d%H%M%S_%f')}" # Added microsecond for more uniqueness
-            if save_break(break_id, break_data):
-                st.success("¡Semana de descanso guardada exitosamente!")
-                st.rerun() # Re-run the app to update the displayed table
-            else:
-                st.error("Error al guardar la semana de descanso.")
-    
-    # Section to delete existing breaks, only displayed if there are breaks to delete
-    if breaks_data:
-        st.subheader("Eliminar Semanas de Descanso")
-        
-        # Prepare options for the selectbox, calculating end_date for display
-        break_options = {}
-        for k, v in breaks_data.items():
-            start_date_str = v.get('start_date')
-            start_date_obj = None
-            try:
-                if start_date_str:
-                    start_date_obj = datetime.datetime.fromisoformat(start_date_str).date()
-            except ValueError:
-                pass # start_date_obj remains None if parsing fails
-
-            duration_weeks = v.get('duration_weeks', 1)
-            # Calculate end_date string for display in the selectbox
-            end_date_str = (start_date_obj + datetime.timedelta(weeks=duration_weeks)).strftime('%Y-%m-%d') if start_date_obj else 'N/A'
-            
-            break_name = v.get('name', 'Sin nombre')
-            # Create a user-friendly string for the selectbox option
-            break_options[f"{break_name} ({v.get('start_date', 'N/A')} - {end_date_str})"] = k
-        
-        if break_options:
-            # Selectbox to choose a break to delete
-            break_to_delete_display = st.selectbox(
-                "Seleccione una semana de descanso para eliminar:",
-                options=list(break_options.keys()),
-                key="delete_break_select"
-            )
-            
-            # Button to trigger deletion
-            if st.button("Eliminar Semana de Descanso", type="primary"):
-                # Get the actual break_id from the selected display string
-                break_id_to_delete = break_options[break_to_delete_display]
-                if delete_break(break_id_to_delete):
-                    st.success("¡Semana de descanso eliminada exitosamente!")
-                    st.rerun() # Re-run to update the table and selectbox
-                else:
-                    st.error("Error al eliminar la semana de descanso.")
-        else:
-            st.info("No hay semanas de descanso para eliminar.")
 
 # Entry point of the Streamlit application
 if __name__ == "__main__":
