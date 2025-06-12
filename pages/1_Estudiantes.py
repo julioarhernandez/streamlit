@@ -4,7 +4,6 @@ import datetime
 from config import setup_page
 from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated
 
-
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
     st.error("Debe iniciar sesión para acceder a esta página.")
@@ -16,18 +15,16 @@ if not st.session_state.get('logged_in', False):
 setup_page("Gestión de Estudiantes")
 
 # Load current students to display count
-
-# cache timestamp from database to prevent unnecessary reloads
 students_last_updated = get_last_updated('students')
 df_loaded, _ = load_students(students_last_updated)
 
 if df_loaded is not None and not df_loaded.empty:
     st.subheader(f"Total de Estudiantes Registrados: {len(df_loaded)}")
     st.divider()
+
 # --- Select Module ---
 st.subheader("1. Seleccionar Módulo")
 
-# Load available modules using the utility function
 try:
     user_email = st.session_state.get('email', '').replace('.', ',')
     modules_last_updated = get_last_updated('modules', user_email)
@@ -51,11 +48,8 @@ try:
         
 except Exception as e:
     st.error(f"Error al cargar los módulos: {str(e)}")
-# Main UI
-# st.header("Gestionar Estudiantes") # st.title is usually sufficient for the main page title
 
 st.divider()
-
 st.subheader("2. Agregar Estudiantes")
 
 # Create tabs for different input methods
@@ -71,8 +65,6 @@ with tab1:
 
 with tab2:
     st.subheader("Ingresar Datos Manualmente")
-    
-    # Text area for multiple student entries (one per line)
     st.write("Ingrese los datos de los estudiantes en el siguiente formato:")
     st.code("Nombre, Email, Canvas ID, Telefono", language="text")
     
@@ -122,11 +114,12 @@ if uploaded_file is not None:
             
             # Get the selected module's details if available
             module_info = {}
-            if 'selected_module' in st.session_state:
+            if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
                     'modulo': st.session_state.selected_module.get('module_name'),
-                    'ciclo': st.session_state.selected_module.get('ciclo')
+                    'ciclo': st.session_state.selected_module.get('ciclo'),
+                    'firebase_key': st.session_state.selected_module_id
                 }
                 
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
@@ -137,6 +130,7 @@ if uploaded_file is not None:
                         df_upload['fecha_inicio'] = module_info['fecha_inicio']
                         df_upload['modulo'] = module_info['modulo']
                         df_upload['ciclo'] = module_info['ciclo']
+                        df_upload['modulo_id'] = module_info['firebase_key']
                     except (ValueError, TypeError):
                         module_info = {}  # Reset if date conversion fails
             
@@ -156,8 +150,6 @@ if uploaded_file is not None:
         st.error(f"Error procesando el archivo: {str(e)}")
         st.error("Por favor, asegúrese de que el archivo no esté abierto en otro programa e inténtelo de nuevo.")
 
-# st.divider()
-
 # --- Add Multiple Students via Text Area ---
 if 'text_area_input' in st.session_state and st.session_state.text_area_input and submit_add_students_text:
     if not students_text_area.strip():
@@ -169,12 +161,12 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
         if not potential_new_names:
             st.warning("No se encontraron nombres de estudiantes válidos en el área de texto después del procesamiento.")
         else:
-            # current_students_df, _ = load_students
             current_students_df = df_loaded
             if current_students_df is None:
                 # Initialize with all required and optional columns
                 current_students_df = pd.DataFrame(columns=[
-                    'nombre', 'email', 'canvas_id', 'telefono','fecha_inicio'
+                    'nombre', 'email', 'canvas_id', 'telefono', 'fecha_inicio',
+                    'modulo', 'ciclo', 'modulo_id'
                 ])
                 
                 # Ensure all columns exist with proper types
@@ -185,7 +177,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     'telefono': str,
                     'fecha_inicio': 'datetime64[ns]',
                     'modulo': str,
-                    'ciclo': str
+                    'ciclo': str,
+                    'modulo_id': str
                 }
                 
                 for col, dtype in column_types.items():
@@ -213,11 +206,12 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             
             # Get the selected module's details if available
             module_info = {}
-            if 'selected_module' in st.session_state:
+            if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
                     'modulo': st.session_state.selected_module.get('module_name'),
-                    'ciclo': st.session_state.selected_module.get('ciclo')
+                    'ciclo': st.session_state.selected_module.get('ciclo'),
+                    'firebase_key': st.session_state.selected_module_id
                 }
                 
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
@@ -235,7 +229,6 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 canvas_id = parts[2] if len(parts) > 2 else ''
                 telefono = parts[3] if len(parts) > 3 else ''
                 
-                
                 if not name:  # Skip empty names
                     continue
                     
@@ -249,11 +242,12 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         'telefono': telefono
                     }
                     
-                    if module_info.get('fecha_inicio'):
+                    if module_info:
                         student_data.update({
-                            'fecha_inicio': module_info['fecha_inicio'],
-                            'modulo': module_info['modulo'],
-                            'ciclo': module_info['ciclo']
+                            'fecha_inicio': module_info.get('fecha_inicio', ''),
+                            'modulo': module_info.get('modulo', ''),
+                            'ciclo': module_info.get('ciclo', ''),
+                            'modulo_id': module_info.get('firebase_key', '')  # Add the Firebase key
                         })
                         
                     students_to_add_list.append(student_data)
@@ -278,11 +272,11 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 else:
                     st.error("Error al agregar estudiantes desde el área de texto.")
 
+# Rest of the file remains the same...
 st.divider()
 
 # --- Display and Manage Current Students ---
 st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
-# df_loaded, _ = load_students()
 
 if df_loaded is not None and not df_loaded.empty:
     if 'nombre' not in df_loaded.columns:
@@ -292,74 +286,84 @@ if df_loaded is not None and not df_loaded.empty:
         if 'Eliminar' not in df_display.columns:
             df_display.insert(0, 'Eliminar', False)
         
-        disabled_columns = [col for col in df_loaded.columns if col != 'Eliminar']
-
-        st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
+        # Define column order with all possible columns
+        all_columns = ['Eliminar', 'nombre', 'email', 'canvas_id', 'telefono', 
+                      'fecha_inicio', 'modulo', 'ciclo', 'modulo_id']
+        # Only include columns that exist in the dataframe
+        column_order = [col for col in all_columns if col in df_display.columns]
         
-        column_order = ["Eliminar",  "canvas_id", "nombre",  "email", "telefono", "fecha_inicio", "modulo", "ciclo"]
-
         # Make a copy of the dataframe for editing
         editable_df = df_display[column_order].copy()
-    
-
+        
+        # Define column configurations
+        column_config = {
+            "Eliminar": st.column_config.CheckboxColumn(
+                "Borrar",
+                help="Seleccione estudiantes para eliminar",
+                default=False,
+                width="small",
+                required=True
+            ),
+            "nombre": st.column_config.TextColumn(
+                "Nombre del Estudiante",
+                help="Nombre completo del estudiante",
+                required=True,
+                width="medium"
+            ),
+            "email": st.column_config.TextColumn(
+                "Correo Electrónico",
+                help="Correo electrónico del estudiante",
+                width="medium"
+            ),
+            "canvas_id": st.column_config.TextColumn(
+                "ID de Canvas",
+                help="ID del estudiante en Canvas",
+                width="small"
+            ),
+            "telefono": st.column_config.TextColumn(
+                "Teléfono",
+                help="Número de teléfono",
+                width="small"
+            ),
+            "modulo": st.column_config.TextColumn(
+                "Módulo",
+                help="Módulo actual del estudiante",
+                disabled=True,
+                width="small"
+            ),
+            "modulo_id": st.column_config.TextColumn(
+                "ID del Módulo",
+                help="ID del módulo en Firebase",
+                disabled=True,
+                width="small"
+            ),
+            "fecha_inicio": st.column_config.DateColumn(
+                "Fecha de Inicio",
+                help="Fecha de inicio en el módulo",
+                format="MM/DD/YYYY",
+                disabled=True,
+                width="small"
+            ),
+            "ciclo": st.column_config.TextColumn(
+                "Ciclo",
+                help="Ciclo actual del estudiante",
+                disabled=True,
+                width="small"
+            )
+        }
+        
+        # Only include columns that exist in the dataframe
+        column_config = {k: v for k, v in column_config.items() if k in df_display.columns}
+        
         # Display the editable table with all fields
         edited_df = st.data_editor(
             editable_df,
-            column_config={
-                "Eliminar": st.column_config.CheckboxColumn(
-                    "Borrar",
-                    help="Seleccione estudiantes para eliminar",
-                    default=False,
-                    width="small",
-                    required=True
-                ),
-                "nombre": st.column_config.TextColumn(
-                    "Nombre del Estudiante",
-                    help="Nombre completo del estudiante",
-                    required=True,
-                    width="medium"
-                ),
-                "email": st.column_config.TextColumn(
-                    "Correo Electrónico",
-                    help="Correo electrónico del estudiante",
-                    width="medium"
-                ),
-                "canvas_id": st.column_config.TextColumn(
-                    "ID de Canvas",
-                    help="ID del estudiante en Canvas",
-                    width="small"
-                ),
-                "telefono": st.column_config.TextColumn(
-                    "Teléfono",
-                    help="Número de teléfono",
-                    width="small"
-                ),
-                "modulo": st.column_config.TextColumn(
-                    "Módulo",
-                    help="Módulo actual del estudiante",
-                    disabled=True,
-                    width="small"
-                ),
-                "fecha_inicio": st.column_config.DateColumn(
-                    "Fecha de Inicio",
-                    help="Fecha de inicio en el módulo",
-                    format="MM/DD/YYYY",
-                    disabled=True,
-                    width="small"
-                ),
-                "ciclo": st.column_config.TextColumn(
-                    "Ciclo",
-                    help="Ciclo actual del estudiante",
-                    disabled=True,
-                    width="small"
-                )
-            },
+            column_config=column_config,
             hide_index=True,
             use_container_width=True,
             num_rows="fixed",
             key=f"students_editor_{st.session_state.get('editor_key', 0)}"
         )
-
         
         # Add save button
         if st.button("💾 Guardar Cambios", key="save_changes_btn"):
@@ -386,6 +390,7 @@ if df_loaded is not None and not df_loaded.empty:
                     st.error("Error al guardar los cambios. Intente nuevamente.")
             else:
                 st.info("No se detectaron cambios para guardar.")
+                
         students_selected_for_deletion = edited_df[edited_df['Eliminar'] == True]
 
         if not students_selected_for_deletion.empty:
