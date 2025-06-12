@@ -4,6 +4,7 @@ from config import auth, db
 from datetime import datetime
 
 
+
 # Initialize session state for login if not already present
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -32,24 +33,18 @@ def logout_user():
 # --- Page Logic ---
 if not st.session_state.logged_in:
 
-
     col1, col2, col3 = st.columns([1, 3, 1]) # Adjust ratios here for different widths
-
-    with col2: # Place the form inside the middle column
+    with col2:
         with st.form("login_form"):
-            st.write("### Iniciar Sesión") # Optional: add a title for clarity
             email = st.text_input("Correo Electrónico", key="login_email")
             password = st.text_input("Contraseña", type="password", key="login_password")
             submitted = st.form_submit_button("Iniciar Sesión", type="primary")
 
-            if submitted:
-                if email and password:
-                    # Assuming login_user is defined elsewhere
-                    # login_user(email, password)
-                    st.success("Intento de inicio de sesión exitoso (simulado).")
-                else:
-                    st.warning("Por favor, ingrese su correo y contraseña.")
-
+        if submitted:
+            if email and password:
+                login_user(email, password)
+            else:
+                st.warning("Por favor, ingrese su correo y contraseña.")
     
     # Hide sidebar when not logged in if desired (more complex, requires st_pages or similar)
     # For now, Streamlit will show 'index' in the sidebar.

@@ -259,7 +259,7 @@ def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
 
 # --- Module Management Functions ---
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data
 def load_modules_from_db(user_email: str) -> pd.DataFrame:
     """Load modules data from Firebase with caching."""
     try:
