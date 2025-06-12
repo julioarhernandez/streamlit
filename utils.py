@@ -301,6 +301,23 @@ def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
         st.error(f"Error saving modules: {str(e)}")
         return False
 
+@st.cache_data
+def get_module_name_by_id(user_email: str, module_id: str) -> str:
+    """Get the module name by its ID."""
+    print("calling get_module_name_by_id with module_id -", module_id)
+    try:
+        user_email_sanitized = user_email.replace('.', ',')
+        modules_data = db.child("modules").child(user_email_sanitized).child(module_id).get().val()
+        print("\n-----modules_data from get_module_name_by_id database ---", modules_data)
+        if modules_data:
+            return modules_data.get('name')
+        else:
+            print(f"Module with firebase_key '{module_id}' not found for user '{user_email}'.")
+            return None
+    except Exception as e:
+        print(f"Error getting module name by firebase_key: {e}")
+        return None
+
 def delete_student(student_nombre_to_delete: str) -> bool:
     """Delete a student from the Firebase list by their 'nombre'."""
     try:

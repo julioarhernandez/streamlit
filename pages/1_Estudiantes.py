@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from config import setup_page
-from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated
+from utils import save_students, load_students, get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -209,9 +209,9 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
-                    'modulo': st.session_state.selected_module.get('module_name'),
-                    'ciclo': st.session_state.selected_module.get('ciclo'),
-                    'firebase_key': st.session_state.selected_module_id
+                    'modulo': get_module_name_by_id(user_email, st.session_state.selected_module_id) or '',
+                    'ciclo': st.session_state.selected_module.get('ciclo', ''),
+                    'modulo_id': st.session_state.selected_module_id  # Store the Firebase key as modulo_id
                 }
                 
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
@@ -247,7 +247,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                             'fecha_inicio': module_info.get('fecha_inicio', ''),
                             'modulo': module_info.get('modulo', ''),
                             'ciclo': module_info.get('ciclo', ''),
-                            'modulo_id': module_info.get('firebase_key', '')  # Add the Firebase key
+                            'modulo_id': module_info.get('modulo_id', '')  # Use modulo_id consistently
                         })
                         
                     students_to_add_list.append(student_data)
@@ -275,14 +275,31 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 # Rest of the file remains the same...
 st.divider()
 
-# --- Display and Manage Current Students ---
 st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
 
 if df_loaded is not None and not df_loaded.empty:
     if 'nombre' not in df_loaded.columns:
         st.error("Los datos de los estudiantes no tienen la columna 'nombre', que es obligatoria.")
     else:
+        # Make a copy of the dataframe for editing
         df_display = df_loaded.copy()
+        
+        # Ensure modulo_id column exists
+        if 'modulo_id' not in df_display.columns:
+            df_display['modulo_id'] = ''
+            
+        # Ensure modulo column exists
+        if 'modulo' not in df_display.columns:
+            df_display['modulo'] = ''
+        
+        # Update module names using modulo_id
+        for idx, row in df_display.iterrows():
+            if pd.notna(row.get('modulo_id')) and row['modulo_id']:
+                module_name = get_module_name_by_id(user_email, str(row['modulo_id']))
+                print("\n module name returned", module_name)
+                if module_name:
+                    df_display.at[idx, 'modulo'] = module_name
+        
         if 'Eliminar' not in df_display.columns:
             df_display.insert(0, 'Eliminar', False)
         
