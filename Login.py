@@ -47,6 +47,8 @@ if not st.session_state.logged_in:
 
         if submitted:
             if email and password:
+                if '@' not in email:
+                    email += '@iti.edu'
                 login_user(email, password)
             else:
                 st.warning("Por favor, ingrese su correo y contraseña.")
