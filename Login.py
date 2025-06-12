@@ -10,6 +10,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.email = None
     st.session_state.user_token = None # To store Firebase token
+    st.session_state.admin = False
 
 def login_user(email, password):
     try:
@@ -17,6 +18,10 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.email = user['email']
         st.session_state.user_token = user['idToken'] # Store the token
+        if 'julio' in email.lower():
+            st.session_state.admin = True
+        else:
+            st.session_state.admin = False
         st.cache_data.clear()
         st.rerun()
     except Exception as e: # Catch generic Firebase errors or others
@@ -65,6 +70,9 @@ else:
         logout_user()
     
     st.title("🎓 Sistema de Gestión Estudiantil")
-    st.write("### ¡Bienvenido!")
+    if st.session_state.admin:
+        st.write("### ¡Bienvenido Admin!")
+    else:
+        st.write("### ¡Bienvenido!")
     st.write("Seleccione una opción del menú lateral para continuar.")
     st.info("Recuerde que todas las operaciones se guardan automáticamente en la base de datos.")

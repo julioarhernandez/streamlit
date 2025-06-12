@@ -7,21 +7,38 @@ import streamlit as st
 #     layout="centered"
 # )
 
-pages = {
-    "Inicio": [
-        st.Page("Login.py", title="Login")
-    ],
-    "Datos": [
-        st.Page("pages/1_Estudiantes.py", title="Estudiantes"),
-        st.Page("pages/2_Asistencia.py", title="Asistencia"),
-        st.Page("pages/4_Modulos.py", title="Módulos"),
-        st.Page("pages/0_Semanas_Descanso.py", title="Vacaciones")
-    ],
-    "Reportes": [
-        st.Page("pages/3_Reportes.py", title="Asistencia"),
-        st.Page("pages/5_Reporte_estudiantes.py", title="Estudiantes")
-    ],
-}
+if not st.session_state.get('logged_in', False):
+    pages = {
+        "Inicio": [
+            st.Page("Login.py", title="Login")
+        ]
+    }
+
+if st.session_state.admin:
+    pages = {
+        "Inicio": [
+            st.Page("Login.py", title="Login")
+        ],
+        "Admin": [
+            st.Page("pages/6_Admin.py", title="Administrar")
+        ]
+    }
+else:
+    pages = {
+        "Inicio": [
+            st.Page("Login.py", title="Login")
+        ],
+        "Datos": [
+            st.Page("pages/1_Estudiantes.py", title="Estudiantes"),
+            st.Page("pages/2_Asistencia.py", title="Asistencia"),
+            st.Page("pages/4_Modulos.py", title="Módulos"),
+            st.Page("pages/0_Semanas_Descanso.py", title="Vacaciones")
+        ],
+        "Reportes": [
+            st.Page("pages/3_Reportes.py", title="Asistencia"),
+            st.Page("pages/5_Reporte_estudiantes.py", title="Estudiantes")
+        ],
+    }
 
 pg = st.navigation(pages)
 pg.run()
