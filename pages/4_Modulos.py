@@ -13,11 +13,36 @@ if not st.session_state.get('logged_in', False):
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
 
-# --- MOCK DATA (to be replaced by a DB table later) ---
-breaks_list = [
-    {'name': 'Spring Break', 'start_date': '2025-06-09', 'end_date': '2025-06-15'},
-    {'name': 'Summer Break', 'start_date': '2025-06-30', 'end_date': '2025-07-06'},
-]
+def load_breaks_from_db():
+    """Load breaks from Firebase and format them for date calculations."""
+    try:
+        breaks_ref = db.child("breaks").get()
+        if not breaks_ref.val():
+            return []
+            
+        breaks_list = []
+        for break_id, break_data in breaks_ref.val().items():
+            if not break_data or not isinstance(break_data, dict):
+                continue
+                
+            try:
+                start_date = datetime.datetime.strptime(break_data.get('start_date', ''), '%Y-%m-%d').date()
+                duration_weeks = int(break_data.get('duration_weeks', 1))
+                end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+                
+                breaks_list.append({
+                    'name': break_data.get('name', 'Semana de Descanso'),
+                    'start_date': start_date.strftime('%Y-%m-%d'),
+                    'end_date': end_date.strftime('%Y-%m-%d')
+                })
+            except (ValueError, KeyError) as e:
+                st.warning(f"Error al procesar semana de descanso {break_id}: {e}")
+                continue
+                
+        return breaks_list
+    except Exception as e:
+        st.error(f"Error al cargar semanas de descanso: {e}")
+        return []
 
 # --- DATE CALCULATION LOGIC ---
 
@@ -320,7 +345,8 @@ if user_email:
         st.info("No hay módulos existentes. Puede agregar uno usando el formulario de arriba.")
     else:
         # --- Automatic Recalculation Logic ---
-        breaks = parse_breaks(breaks_list)
+        breaks_data = load_breaks_from_db()
+        breaks = parse_breaks(breaks_data)
         today = datetime.date.today()
 
         # Find the current module's info (only for Cycle 1)
