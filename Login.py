@@ -3,29 +3,6 @@ import pyrebase
 from config import auth, db
 from datetime import datetime
 
-# Custom CSS for better styling
-st.markdown("""
-    <style>
-    .main {
-        /* max-width: 1000px; Remove or adjust if layout="wide" is preferred globally */
-        /* margin: 0 auto; */
-        padding: 1rem; /* Adjusted padding */
-    }
-    .login-container {
-        max-width: 400px;
-        margin: 3rem auto; /* Adjusted margin */
-        padding: 2rem;
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        background-color: #ffffff; /* Ensure background for better visibility if page bg changes */
-    }
-    .stButton>button {
-        width: 100%;
-        margin-top: 1rem;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # Initialize session state for login if not already present
 if 'logged_in' not in st.session_state:
@@ -55,19 +32,24 @@ def logout_user():
 # --- Page Logic ---
 if not st.session_state.logged_in:
 
-    st.markdown("<h2 style='text-align: center;'>Iniciar Sesión</h2>", unsafe_allow_html=True)
-    
-    with st.form("login_form"):
-        email = st.text_input("Correo Electrónico", key="login_email")
-        password = st.text_input("Contraseña", type="password", key="login_password")
-        submitted = st.form_submit_button("Iniciar Sesión", type="primary")
 
-        if submitted:
-            if email and password:
-                login_user(email, password)
-            else:
-                st.warning("Por favor, ingrese su correo y contraseña.")
-    st.markdown('</div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 3, 1]) # Adjust ratios here for different widths
+
+    with col2: # Place the form inside the middle column
+        with st.form("login_form"):
+            st.write("### Iniciar Sesión") # Optional: add a title for clarity
+            email = st.text_input("Correo Electrónico", key="login_email")
+            password = st.text_input("Contraseña", type="password", key="login_password")
+            submitted = st.form_submit_button("Iniciar Sesión", type="primary")
+
+            if submitted:
+                if email and password:
+                    # Assuming login_user is defined elsewhere
+                    # login_user(email, password)
+                    st.success("Intento de inicio de sesión exitoso (simulado).")
+                else:
+                    st.warning("Por favor, ingrese su correo y contraseña.")
+
     
     # Hide sidebar when not logged in if desired (more complex, requires st_pages or similar)
     # For now, Streamlit will show 'index' in the sidebar.
