@@ -126,22 +126,17 @@ def display_breaks_table(breaks_data):
 
 def add_break_form():
     """
-    Displays a form to add a new break.
-    The 'Período' caption updates reactively with user input.
+    Displays inputs to add a new break.
+    The 'Período' caption updates reactively with user input without a form.
+    Returns dictionary of data if save button is pressed, otherwise None.
     """
-    # Initialize default values for the form fields for consistent behavior on first load
-    # or after a form submission (if clear_on_submit is True)
+    # Initialize default values for the input fields for consistent behavior
     default_name = ''
     default_description = ''
     default_start_date = datetime.date.today()
     default_duration_weeks = 1
 
-    # Use unique keys for each widget to ensure Streamlit manages their state correctly.
-    # The 'value' parameter can directly use the widget's current return if we want
-    # reactive updates. However, for initial values or to reset after submission,
-    # it's better to store them in session_state and update them when needed.
-
-    # Initialize session state for form fields if they don't exist
+    # Initialize session state for input fields if they don't exist
     if 'add_break_name' not in st.session_state:
         st.session_state.add_break_name = default_name
     if 'add_break_description' not in st.session_state:
@@ -151,88 +146,81 @@ def add_break_form():
     if 'add_break_duration_weeks' not in st.session_state:
         st.session_state.add_break_duration_weeks = default_duration_weeks
 
-    # Use a unique key for the form itself and set clear_on_submit to True
-    # This automatically clears the form fields after successful submission.
-    with st.form("add_break_form_key", clear_on_submit=True):
-        st.subheader("Agregar Semana de Descanso")
-        
-        col1, col2 = st.columns(2)
-        
-        # Text input for the break name
-        # The on_change callback will update session_state, making it reactive
-        name = col1.text_input(
-            "Nombre de la Semana de Descanso",
-            value=st.session_state.add_break_name,
-            key="break_name_input",
-            on_change=lambda: setattr(st.session_state, 'add_break_name', st.session_state.break_name_input)
-        )
-        
-        # Text area for the description
-        description = col2.text_area(
-            "Descripción (opcional)",
-            value=st.session_state.add_break_description,
-            key="break_description_input",
-            on_change=lambda: setattr(st.session_state, 'add_break_description', st.session_state.break_description_input)
-        )
-        
-        col1, col2 = st.columns(2)
-        
-        # Date input for the start date
-        start_date = col1.date_input(
-            "Fecha de Inicio",
-            value=st.session_state.add_break_start_date,
-            key="break_start_date_input",
-            on_change=lambda: setattr(st.session_state, 'add_break_start_date', st.session_state.break_start_date_input)
-        )
-        
-        # Number input for duration in weeks
-        duration_weeks = col2.number_input(
-            "Duración (semanas)",
-            min_value=1,
-            value=st.session_state.add_break_duration_weeks,
-            step=1,
-            key="break_duration_input",
-            on_change=lambda: setattr(st.session_state, 'add_break_duration_weeks', st.session_state.break_duration_input)
-        )
-        
-        # Calculate and display the date range dynamically.
-        # This caption will update immediately because start_date and duration_weeks
-        # directly reflect the current widget values on each re-run.
-        end_date_display = start_date + datetime.timedelta(weeks=duration_weeks)
-        st.caption(f"Período: {start_date.strftime('%Y-%m-%d')} al {end_date_display.strftime('%Y-%m-%d')}")
-        
-        # Form submit button
-        submitted = st.form_submit_button("Guardar Semana de Descanso")
-        
-        if submitted:
-            if not name:
-                st.error("El nombre es obligatorio.")
-                return None # Stop processing if name is missing
-            
-            # Reset session state variables after successful submission
-            st.session_state.add_break_name = default_name
-            st.session_state.add_break_description = default_description
-            st.session_state.add_break_start_date = default_start_date
-            st.session_state.add_break_duration_weeks = default_duration_weeks
-
-            # Return the data to be saved
-            return {
-                'name': name,
-                'description': description,
-                'start_date': start_date.isoformat(), # Convert date object to ISO format string
-                'duration_weeks': duration_weeks,
-                'created_at': datetime.datetime.now().isoformat(), # Record creation timestamp
-                'created_by': st.session_state.get('email', 'system') # Record creator's email
-            }
+    st.subheader("Agregar Semana de Descanso")
     
-    return None # Return None if the form has not been submitted
+    col1, col2 = st.columns(2)
+    
+    # Text input for the break name.
+    name = col1.text_input(
+        "Nombre de la Semana de Descanso",
+        value=st.session_state.add_break_name,
+        key="break_name_input"
+    )
+    
+    # Text area for the description.
+    description = col2.text_area(
+        "Descripción (opcional)",
+        value=st.session_state.add_break_description,
+        key="break_description_input"
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    # Date input for the start date.
+    # Its value will update directly on interaction.
+    start_date = col1.date_input(
+        "Fecha de Inicio",
+        value=st.session_state.add_break_start_date, # Use session state for initial value
+        key="break_start_date_input"
+    )
+    
+    # Number input for duration in weeks.
+    # Its value will update directly on interaction.
+    duration_weeks = col2.number_input(
+        "Duración (semanas)",
+        min_value=1,
+        value=st.session_state.add_break_duration_weeks, # Use session state for initial value
+        step=1,
+        key="break_duration_input"
+    )
+    
+    # Calculate and display the date range dynamically.
+    # This caption will update immediately because start_date and duration_weeks
+    # now directly reflect the current widget values on each re-run.
+    end_date_display = start_date + datetime.timedelta(weeks=duration_weeks)
+    st.caption(f"Período: {start_date.strftime('%Y-%m-%d')} al {end_date_display.strftime('%Y-%m-%d')}")
+    
+    # Regular Streamlit button for saving data.
+    # This will trigger a re-run and the logic below.
+    if st.button("Guardar Semana de Descanso"):
+        if not name:
+            st.error("El nombre es obligatorio.")
+            return None 
+        
+        # Reset session state variables after successful submission.
+        st.session_state.add_break_name = default_name
+        st.session_state.add_break_description = default_description
+        st.session_state.add_break_start_date = default_start_date 
+        st.session_state.add_break_duration_weeks = default_duration_weeks 
+
+        # Return the data to be saved
+        return {
+            'name': name,
+            'description': description,
+            'start_date': start_date.isoformat(), # Convert date object to ISO format string
+            'duration_weeks': duration_weeks,
+            'created_at': datetime.datetime.now().isoformat(), # Record creation timestamp
+            'created_by': st.session_state.get('email', 'system') # Record creator's email
+        }
+    
+    return None # Return None if the button has not been pressed
 
 # --- Main App ---
 
 def main():
     """
     Main function to run the Streamlit application for managing break weeks.
-    Displays existing breaks, provides a form to add new ones, and a section to delete them.
+    Displays existing breaks, provides an area to add new ones, and a section to delete them.
     """
     
     st.markdown("""
@@ -249,7 +237,9 @@ def main():
     
     # Section to add a new break, wrapped in an expander
     with st.expander("Agregar Nueva Semana de Descanso", expanded=False):
-        break_data = add_break_form() # Call the form function to get submitted data
+        # Call the form function to get submitted data.
+        # This will return data only when the "Guardar Semana de Descanso" button is pressed.
+        break_data = add_break_form() 
         if break_data:
             # Generate a unique ID for the new break based on current timestamp
             break_id = f"break_{datetime.datetime.now().strftime('%Y%m%d%H%M%S_%f')}" # Added microsecond for more uniqueness
