@@ -51,7 +51,6 @@ def set_last_updated(table_name, user_email=None):
         })
     return now_iso
     
-
 @st.cache_data
 def load_students(students_last_updated):
     """
@@ -301,6 +300,7 @@ def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
     except Exception as e:
         st.error(f"Error saving modules: {str(e)}")
         return False
+
 def delete_student(student_nombre_to_delete: str) -> bool:
     """Delete a student from the Firebase list by their 'nombre'."""
     try:
