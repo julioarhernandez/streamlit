@@ -14,7 +14,8 @@ pages = {
     "Datos": [
         st.Page("pages/1_Estudiantes.py", title="Estudiantes"),
         st.Page("pages/2_Asistencia.py", title="Asistencia"),
-        st.Page("pages/4_Modulos.py", title="Módulos")
+        st.Page("pages/4_Modulos.py", title="Módulos"),
+        st.Page("pages/0_Semanas_Descanso.py", title="Vacaciones")
     ],
     "Reportes": [
         st.Page("pages/3_Reportes.py", title="Asistencia"),
