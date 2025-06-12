@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 # Assuming 'config' module has 'setup_page' and 'db' (Firebase instance)
 from config import setup_page, db 
+from utils import date_format
 
 # --- Page Setup and Login Check ---
 setup_page("Semanas de Descanso")
@@ -100,8 +101,7 @@ def display_breaks_table(breaks_data):
                 'Nombre': break_info.get('name', ''),
                 'Fecha Inicio': start_date.strftime('%Y-%m-%d') if start_date else 'N/A',
                 'Duración (semanas)': duration_weeks,
-                'Fecha Fin': end_date.strftime('%Y-%m-%d') if end_date else 'N/A',
-                'Descripción': break_info.get('description', '')
+                'Fecha Fin': end_date.strftime('%Y-%m-%d') if end_date else 'N/A'
             })
     
     if not breaks_list:
@@ -116,12 +116,11 @@ def display_breaks_table(breaks_data):
             'Nombre': 'Nombre',
             'Fecha Inicio': 'Inicio',
             'Duración (semanas)': 'Semanas',
-            'Fecha Fin': 'Fin',
-            'Descripción': 'Descripción'
+            'Fecha Fin': 'Fin'
         },
         hide_index=True,  # Hide pandas DataFrame index
         use_container_width=True, # Make dataframe occupy full width
-        column_order=['Nombre', 'Fecha Inicio', 'Duración (semanas)', 'Fecha Fin', 'Descripción']
+        column_order=['Nombre', 'Fecha Inicio', 'Duración (semanas)', 'Fecha Fin']
     )
 
 def add_break_form():
@@ -132,15 +131,12 @@ def add_break_form():
     """
     # Initialize default values for the input fields for consistent behavior
     default_name = ''
-    default_description = ''
     default_start_date = datetime.date.today()
     default_duration_weeks = 1
 
     # Initialize session state for input fields if they don't exist
     if 'add_break_name' not in st.session_state:
         st.session_state.add_break_name = default_name
-    if 'add_break_description' not in st.session_state:
-        st.session_state.add_break_description = default_description
     if 'add_break_start_date' not in st.session_state:
         st.session_state.add_break_start_date = default_start_date
     if 'add_break_duration_weeks' not in st.session_state:
@@ -148,38 +144,28 @@ def add_break_form():
 
     st.subheader("Agregar Semana de Descanso")
     
-    col1, col2 = st.columns(2)
+    # Single row with all inputs
+    col1, col2, col3 = st.columns([2, 2, 1])
     
-    # Text input for the break name.
+    # Text input for the break name
     name = col1.text_input(
         "Nombre de la Semana de Descanso",
         value=st.session_state.add_break_name,
         key="break_name_input"
     )
     
-    # Text area for the description.
-    description = col2.text_area(
-        "Descripción (opcional)",
-        value=st.session_state.add_break_description,
-        key="break_description_input"
-    )
-    
-    col1, col2 = st.columns(2)
-    
-    # Date input for the start date.
-    # Its value will update directly on interaction.
-    start_date = col1.date_input(
+    # Date input for the start date
+    start_date = col2.date_input(
         "Fecha de Inicio",
-        value=st.session_state.add_break_start_date, # Use session state for initial value
+        value=st.session_state.add_break_start_date,
         key="break_start_date_input"
     )
     
-    # Number input for duration in weeks.
-    # Its value will update directly on interaction.
-    duration_weeks = col2.number_input(
-        "Duración (semanas)",
+    # Number input for duration in weeks
+    duration_weeks = col3.number_input(
+        "Semanas",
         min_value=1,
-        value=st.session_state.add_break_duration_weeks, # Use session state for initial value
+        value=st.session_state.add_break_duration_weeks,
         step=1,
         key="break_duration_input"
     )
@@ -188,7 +174,7 @@ def add_break_form():
     # This caption will update immediately because start_date and duration_weeks
     # now directly reflect the current widget values on each re-run.
     end_date_display = start_date + datetime.timedelta(weeks=duration_weeks)
-    st.caption(f"Período: {start_date.strftime('%Y-%m-%d')} al {end_date_display.strftime('%Y-%m-%d')}")
+    st.caption(f"Período: {date_format(start_date, "%Y/%m/%d")} al {date_format(end_date_display, "%Y/%m/%d")}")
     
     # Regular Streamlit button for saving data.
     # This will trigger a re-run and the logic below.
@@ -199,18 +185,16 @@ def add_break_form():
         
         # Reset session state variables after successful submission.
         st.session_state.add_break_name = default_name
-        st.session_state.add_break_description = default_description
         st.session_state.add_break_start_date = default_start_date 
         st.session_state.add_break_duration_weeks = default_duration_weeks 
 
         # Return the data to be saved
         return {
             'name': name,
-            'description': description,
-            'start_date': start_date.isoformat(), # Convert date object to ISO format string
+            'start_date': start_date.isoformat(),
             'duration_weeks': duration_weeks,
-            'created_at': datetime.datetime.now().isoformat(), # Record creation timestamp
-            'created_by': st.session_state.get('email', 'system') # Record creator's email
+            'created_at': datetime.datetime.now().isoformat(),
+            'created_by': st.session_state.get('email', 'system')
         }
     
     return None # Return None if the button has not been pressed
