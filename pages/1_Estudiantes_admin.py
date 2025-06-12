@@ -42,46 +42,55 @@ st.subheader("1. Seleccionar Curso")
 course_emails = get_student_group_emails()
 
 if course_emails:
-    # Create a mapping of display names to emails for better UX
-    course_emails = [email.capitalize().split('@')[0] for email in course_emails]
-    course_options = {email: f"Curso: {email}" for email in course_emails}
-    
+    full_emails_for_options = course_emails.copy() # Good practice to copy if you modify original later
+    course_options = {
+        email: {
+            'label': email.capitalize().split('@')[0], # Display part without domain
+            'value': email                             # Full email with domain
+        }
+        for email in full_emails_for_options
+    }
+
     selected_course = st.selectbox(
         "Seleccione un Curso para agregar a los nuevos estudiantes:",
-        options=course_emails,
-        format_func=lambda x: course_options[x],
+        options=full_emails_for_options,
+        format_func=lambda x: course_options[x]['label'],
         index=0
     )
+
+    # st.write(f"You selected the full email: {selected_course}")
+
 else:
     st.warning("No se encontraron cursos disponibles.")
     selected_course = None
 
 # --- Select Module ---
-st.subheader("2. Seleccionar Módulo")
+if selected_course:
+    st.divider()
+    st.subheader("2. Seleccionar Módulo")
 
-try:
-    user_email = st.session_state.get('email', '').replace('.', ',')
-    modules_last_updated = get_last_updated('modules', user_email)
-    module_options = get_available_modules(user_email, modules_last_updated)
-    
-    if module_options:
-        selected_module = st.selectbox(
-            "Seleccione un módulo para agregar a los nuevos estudiantes:",
-            options=module_options,
-            format_func=lambda x: x['label'],
-            index=0
-        )
+    try:
+        modules_last_updated = get_last_updated('modules', selected_course)
+        module_options = get_available_modules(selected_course, modules_last_updated)
         
-        # Store selected module in session state for later use
-        if selected_module:
-            st.session_state.selected_module = selected_module
-            st.session_state.selected_module_id = selected_module['module_id']
-            st.session_state.selected_ciclo = selected_module['ciclo']
-    else:
-        st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
-        
-except Exception as e:
-    st.error(f"Error al cargar los módulos: {str(e)}")
+        if module_options:
+            selected_module = st.selectbox(
+                "Seleccione un módulo para agregar a los nuevos estudiantes:",
+                options=module_options,
+                format_func=lambda x: x['label'],
+                index=0
+            )
+            
+            # Store selected module in session state for later use
+            if selected_module:
+                st.session_state.selected_module = selected_module
+                st.session_state.selected_module_id = selected_module['module_id']
+                st.session_state.selected_ciclo = selected_module['ciclo']
+        else:
+            st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
+            
+    except Exception as e:
+        st.error(f"Error al cargar los módulos: {str(e)}")
 
 st.divider()
 st.subheader("3. Agregar Estudiantes")
@@ -312,7 +321,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
 # Rest of the file remains the same...
 st.divider()
 
-st.subheader(f"Estudiantes Actuales (Total: {len(df_loaded) if df_loaded is not None else 0})")
+st.subheader(f"Estudiantes Actuales en el curso {selected_course.capitalize().split('@')[0]} (Total: {len(df_loaded) if df_loaded is not None else 0})")
 
 if df_loaded is not None and not df_loaded.empty:
     if 'nombre' not in df_loaded.columns:
