@@ -73,8 +73,8 @@ def display_breaks_table(breaks_data):
             
             duration_weeks = break_info.get('duration_weeks', 1)
             
-            # Calculate end_date only if start_date was successfully parsed
-            end_date = (start_date + datetime.timedelta(weeks=duration_weeks)) if start_date else None
+            # Calculate end_date (Sunday of the last week) only if start_date was successfully parsed
+            end_date = (start_date + datetime.timedelta(days=(7 * duration_weeks) - 1)) if start_date else None
             
             breaks_list.append({
                 'ID': break_id,
@@ -213,9 +213,10 @@ def add_break_form():
     )
     
     # Calculate and display the date range dynamically.
-    # End date is always Sunday (6 days after start of the last week)
-    end_date_display = start_date + datetime.timedelta(weeks=duration_weeks, days=-1)  # Sunday of the last week
-    st.caption(f"Período: {date_format(start_date, "%Y/%m/%d")} al {date_format(end_date_display, "%Y/%m/%d")}")
+    # A week is from Monday to Sunday (7 days total)
+    end_date_display = start_date + datetime.timedelta(days=(7 * duration_weeks) - 1)  # Sunday of the last week
+    st.caption(f"Período: {date_format(start_date, "%Y/%m/%d")} al {date_format(end_date_display, "%Y/%m/%d")} "
+              f"({duration_weeks} semana{'s' if duration_weeks != 1 else ''})")
     
     # Regular Streamlit button for saving data.
     # This will trigger a re-run and the logic below.
