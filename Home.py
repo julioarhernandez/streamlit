@@ -20,7 +20,10 @@ if st.session_state.admin:
             st.Page("Login.py", title="Login")
         ],
         "Admin": [
-            st.Page("pages/6_Admin.py", title="Administrar")
+            st.Page("pages/1_Estudiantes_admin.py", title="Estudiantes"),
+            st.Page("pages/6_Admin.py", title="Administrar"),
+            st.Page("pages/0_Semanas_Descanso.py", title="Vacaciones"),
+            st.Page("pages/4_Modulos_admin.py", title="Módulos")
         ]
     }
 else:
