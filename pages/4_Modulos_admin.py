@@ -1,12 +1,7 @@
 import streamlit as st
 import pandas as pd
-import datetime
-import time
-import math
-import uuid
-from config import setup_page, db
-from utils import set_last_updated, get_last_updated, get_available_modules  
-from utils_admin import admin_get_student_group_emails
+from config import setup_page
+from utils_admin import admin_get_student_group_emails, save_modules_to_db, admin_get_available_modules
 
 # --- Page Setup and Login Check ---
 setup_page("Gestión de Módulos por Administrador")
@@ -53,53 +48,98 @@ else:
     st.warning("No se encontraron cursos disponibles.")
     modules_selected_course = None # Ensure it's explicitly None if no courses
 
-
-# --- Load current students based on modules_selected_course ---
-# This block uses the cached function and stores the result in session state.
-# This ensures the database is read only once per course per session.
-
-# if modules_selected_course:
-#     if modules_selected_course not in st.session_state.modules_df_by_course:
-#         df_loaded, _ = get_current_students_data(modules_selected_course) # Use the cached function
-#         if df_loaded is not None:
-#             st.session_state.modules_df_by_course[modules_selected_course] = df_loaded
-#         else:
-#             st.session_state.modules_df_by_course[modules_selected_course] = pd.DataFrame() # Store an empty DataFrame on failure
-#             st.warning(f"No se pudieron cargar estudiantes para el curso: {modules_selected_course}. Iniciando con una lista vacía.")
-#     else:
-#         df_loaded = st.session_state.modules_df_by_course[modules_selected_course]
-# else:
-#     df_loaded = pd.DataFrame() # Provide an empty DataFrame if no course is selected
-#     st.info("Por favor, seleccione un curso para cargar los estudiantes.")
-
-# print("\nLoaded df_loaded (from DB/Session State):\n", df_loaded)
-# print("\nSession State (modules_df_by_course):\n", st.session_state.modules_df_by_course)
-
 # --- Select Module ---
 if modules_selected_course: # Only show module selection if a course is selected
     st.divider()
     st.subheader("2. Seleccionar Módulo")
 
-    try:
-        modules_last_updated = get_last_updated('modules', modules_selected_course)
-        module_options = get_available_modules(modules_selected_course, modules_last_updated)
+try:
+    module_options = admin_get_available_modules(modules_selected_course)
+    print("\n\nmodule_options\n\n ----- ", module_options)
 
-        if module_options:
-            selected_module = st.selectbox(
-                "Seleccione un módulo para agregar a los nuevos estudiantes:",
-                options=module_options,
-                format_func=lambda x: x['label'],
-                index=0,
-                key="module_selector" # Added key for consistency
-            )
+    if module_options:
+        df = pd.DataFrame(module_options)
+        print("\n\nAvailable columns in module data:", df.columns.tolist())
 
-            # Store selected module in session state for later use
-            if selected_module: # Ensure a module is actually selected
-                st.session_state.modules_selected_module = selected_module
-                st.session_state.modules_selected_module_id = selected_module['module_id']
-                st.session_state.modules_selected_ciclo = selected_module['ciclo']
-        else:
-            st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
+        # Define your primary column mapping for known columns
+        column_mapping = {
+            'module_name': 'Nombre Módulo',
+            'module_id': 'ID Módulo',
+            'ciclo': 'Ciclo',
+            'start_date': 'Fecha Inicio',
+            'end_date': 'Fecha Fin',
+            'duration_weeks': 'Duración',
+            'credits': 'Orden',
+            'description': 'Descripción',
+            'firebase_key': 'Firebase Key'
+        }
 
-    except Exception as e:
-        st.error(f"Error al cargar los módulos: {str(e)}")
+        # Dynamically create display_columns to include ALL columns present in the DataFrame
+        # and create display names for them.
+        display_columns = []
+        reverse_display_names = {} # To map display names back to original for saving
+
+        for col in df.columns:
+            # Use the mapped name if available, otherwise use the original column name
+            display_name = column_mapping.get(col, col)
+            display_columns.append(display_name)
+            reverse_display_names[display_name] = col # Store reverse mapping
+
+        if not display_columns:
+            st.warning("No se encontraron columnas válidas para mostrar.")
+            st.json(module_options[0] if module_options else {})  # Show raw data for debugging
+            st.stop()
+
+        # Create a copy for display, renaming columns
+        # Ensure only columns that exist in df are selected, and then rename them
+        display_df = df.rename(columns=column_mapping)[display_columns].copy()
+        
+        # Hide specific columns from display
+        columns_to_hide = ["Ciclo", "Firebase Key", "label", "ID Módulo"]  # Add any other columns you want to hide here
+        display_df = display_df.drop(columns=[col for col in columns_to_hide if col in display_df.columns])
+        
+        # Convert date columns from string to datetime
+        date_columns = ["Fecha Inicio", "Fecha Fin"]
+        for date_col in date_columns:
+            if date_col in display_df.columns:
+                display_df[date_col] = pd.to_datetime(display_df[date_col], errors='coerce')
+
+        # Define column configurations for st.data_editor
+        editor_column_config = {
+            "ID Módulo": st.column_config.TextColumn(disabled=True),
+            "Fecha Inicio": st.column_config.DateColumn(format="MM/DD/YYYY"),
+            "Fecha Fin": st.column_config.DateColumn(format="MM/DD/YYYY"),
+            "Duración": st.column_config.NumberColumn(min_value=1, step=1),
+            "Orden": st.column_config.NumberColumn(min_value=1, step=1),
+            "Descripción": st.column_config.TextColumn(),
+        }
+
+        st.write("Editar módulos:")
+        edited_df = st.data_editor(
+            display_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config=editor_column_config # Use the dynamically defined column_config
+        )
+
+        # Add save button
+        if st.button("💾 Guardar Cambios"):
+            # Convert back to original column names for saving
+            # Use the dynamically created reverse_display_names map
+            edited_df_for_save = edited_df.rename(columns=reverse_display_names)
+
+            # Ensure all original columns are present in the dataframe to save
+            # This is important if `num_rows="dynamic"` was used and new rows were added,
+            # or if some columns were not in `display_columns`.
+            final_df_to_save = df.copy() # Start with the original loaded data
+            for col in edited_df_for_save.columns:
+                final_df_to_save[col] = edited_df_for_save[col]
+
+            # Save the changes
+            if save_modules_to_db(modules_selected_course, final_df_to_save):
+                st.success("¡Cambios guardados exitosamente!")
+                st.rerun()
+    else:
+        st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message
+except Exception as e:
+    st.error(f"Error al cargar o procesar los módulos: {str(e)}")

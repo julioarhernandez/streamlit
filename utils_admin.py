@@ -295,3 +295,115 @@ def admin_save_students(course_email, students_df):
         if 'df' in locals():
             st.error(f"Columns in DataFrame: {', '.join(df.columns)}")
         return False
+
+@st.cache_data
+def admin_get_available_modules(user_email: str) -> list:
+    """
+    Retrieve and process available modules for a user.
+
+    Args:
+        user_email: The user's email (with . replaced with , for Firebase path)
+
+    Returns:
+        list: List of module options with their details, sorted by proximity to current date
+    """
+    try:
+        # Create a fresh Firebase reference for this operation
+        # Note: You should ensure 'db' is initialized before this function is called.
+        modules_ref = db.child("modules").child(user_email).get()
+
+        if 'call_count' not in st.session_state:
+            st.session_state.call_count = 0
+        st.session_state.call_count += 1
+        print(f"\n{st.session_state.call_count} ---get_available_modules-data from firebase----\n", modules_ref.val())
+
+        if not modules_ref.val():
+            return []
+
+        module_options = []
+        today = datetime.datetime.today()
+        cutoff_date = today - datetime.timedelta(days=180)
+
+        # Process each module
+        for module_id, module_data in modules_ref.val().items():
+            if not module_data:
+                continue
+
+            module_name = module_data.get('name', 'Módulo sin nombre')
+
+            # --- Extract ALL relevant module data fields ---
+            # Debug: Print the raw module data
+            print(f"\nRaw module data for {module_id}:", module_data)
+            
+            # Use .get() with a default value to avoid KeyError if a field is missing in Firebase
+            start_date_str = module_data.get('fecha_inicio_1')
+            end_date_str = module_data.get('fecha_fin_1')  # Check if this field exists in your database
+            
+            # Try different possible field names for duration and credits
+            duration_weeks = 0
+            if 'duracion_semanas' in module_data:
+                duration_weeks = module_data['duracion_semanas']
+            elif 'duration_weeks' in module_data:
+                duration_weeks = module_data['duration_weeks']
+                
+            credits = 0
+            if 'creditos' in module_data:
+                credits = module_data['creditos']
+            elif 'credits' in module_data:
+                credits = module_data['credits']
+                
+            description = module_data.get('description', '')  # Try English version first
+            if not description:  # Fall back to Spanish if English version doesn't exist
+                description = module_data.get('descripcion', '')
+                
+            ciclo = module_data.get('ciclo', 1)  # Default to 1 if not specified
+            
+            # Debug: Print the extracted values
+            print(f"Extracted values - duration: {duration_weeks}, credits: {credits}, description: {description}")
+
+            start_date_dt = None
+            if isinstance(start_date_str, str):
+                try:
+                    start_date_dt = datetime.datetime.fromisoformat(start_date_str)
+                except (ValueError, TypeError):
+                    pass # Keep start_date_dt as None if parsing fails
+
+            # Only add the module if start_date is parsed successfully and is within cutoff
+            if start_date_dt and start_date_dt >= cutoff_date:
+                module_entry = {
+                    'label': f"{module_name} (Ciclo {ciclo} - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
+                    'module_id': module_id,
+                    'module_name': module_name, # Original name
+                    'ciclo': ciclo,
+                    'start_date': start_date_str, # Keep as string for this function's return, conversion happens in UI
+                    'end_date': end_date_str,     # Include end_date
+                    'duration_weeks': duration_weeks,
+                    'credits': credits,           # Add credits
+                    'description': description,   # Add description
+                    'firebase_key': module_id     # This is often useful, same as module_id
+                }
+                module_options.append(module_entry)
+
+        # Sort by proximity to today's date
+        # Ensure 'start_date' is a string before trying fromisoformat
+        module_options.sort(
+            key=lambda x: abs((datetime.datetime.fromisoformat(x['start_date']) - today).days)
+            if 'start_date' in x and isinstance(x['start_date'], str) and x['start_date'] else float('inf')
+        )
+
+        return module_options
+
+    except Exception as e:
+        st.error(f"Error al cargar los módulos: {str(e)}")
+        return []
+
+def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
+    """Save modules to Firebase and update session."""
+    try:
+        user_email_sanitized = user_email
+        db.child("modules").child(user_email_sanitized).set(modules_df.to_dict('records'))
+        update_modules_in_session(modules_df)
+        return True
+    except Exception as e:
+        st.error(f"Error saving modules: {str(e)}")
+        return False
