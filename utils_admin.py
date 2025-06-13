@@ -35,14 +35,15 @@ def admin_set_last_updated(table_name, course_email):
     
     Args:
         table_name (str): The name of the data section ('attendance', 'students', 'modules', etc.)
+        course_email (str): The email of the course to update
     
     Returns:
         str: The new last_updated ISO timestamp.
     """
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    if user_email:
-        user_email = user_email.replace('.', ',')
-        db.child("metadata").child(table_name).child(user_email).update({
+    if course_email:
+        safe_email = course_email.replace('.', ',')
+        db.child("metadata").child(table_name).child(safe_email).update({
             'last_updated': now_iso
         })
     else:
@@ -203,11 +204,12 @@ def admin_load_students(course_email):
         st.error(f"Error loading students: {str(e)}")
         return None, None
 
-def admin_save_students(students_df):
+def admin_save_students(course_email, students_df):
     """
     Save students data to Firebase with proper handling of all fields.
     
     Args:
+        course_email (str): Email of the course to save students to
         students_df (DataFrame): DataFrame containing student records
         
     Returns:
@@ -218,8 +220,6 @@ def admin_save_students(students_df):
             st.warning("No student data to save.")
             return False
             
-        user_email = st.session_state.email.replace('.', ',')
-        
         # Create a working copy to avoid modifying the original
         df = students_df.copy()
         
@@ -282,9 +282,9 @@ def admin_save_students(students_df):
         
         # Save to Firebase with error handling
         try:
-            db.child("students").child(user_email).set(data)
-            st.success(f"Successfully saved {len(df)} student records.")
-            set_last_updated('students')
+            db.child("students").child(course_email).set(data)
+            st.success(f"Successfully saved {len(df)} student records to {course_email}.")
+            admin_set_last_updated('students', course_email)
             return True
         except Exception as firebase_error:
             st.error(f"Firebase error: {str(firebase_error)}")
