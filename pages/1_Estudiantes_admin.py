@@ -405,7 +405,6 @@ if df_loaded is not None and not df_loaded.empty:
                 help="Seleccione estudiantes para eliminar",
                 default=False,
                 width="small",
-                # removed: required=True (as it causes issues with checkboxes)
                 pinned=True # This makes sure the checkbox column is always visible
             ),
             "nombre": st.column_config.TextColumn(
