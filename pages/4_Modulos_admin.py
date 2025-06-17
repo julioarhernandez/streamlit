@@ -16,6 +16,8 @@ if 'editor_key' not in st.session_state:
     st.session_state.editor_key = 0
 if 'modules_df_by_course' not in st.session_state:
     st.session_state.modules_df_by_course = {} # This will store DataFrames per course
+if 'force_refresh' not in st.session_state:
+    st.session_state.force_refresh = False
 # --- End Initialize session state variables ---
 
 # --- Select Course ---
@@ -114,20 +116,24 @@ try:
             "Descripción": st.column_config.TextColumn(),
         }
 
-        # Initialize session state for this course if not exists
-        if modules_selected_course not in st.session_state.modules_df_by_course:
+        # Initialize session state for this course if not exists OR if force refresh is needed
+        if (modules_selected_course not in st.session_state.modules_df_by_course or 
+            st.session_state.force_refresh):
             st.session_state.modules_df_by_course[modules_selected_course] = display_df.copy()
-
-        
+            st.session_state.force_refresh = False  # Reset force refresh flag
 
         st.write("Editar módulos:")
+        
+        # Create a unique key that changes when we need to force refresh
+        editor_key = f"main_editor_{modules_selected_course}_{st.session_state.editor_key}"
+        
         # Use the session state version for the editor
         edited_df = st.data_editor(
             st.session_state.modules_df_by_course[modules_selected_course],
             use_container_width=True,
             num_rows="dynamic",
             column_config=editor_column_config,
-            key=f"main_editor_{modules_selected_course}"
+            key=editor_key
         )
 
         # You update the session state with the (potentially problematic) edited data
@@ -177,9 +183,12 @@ try:
 
                             # Calculate the new end date (one week after the last module's start date)
                             
-                            
                             # Update the session state with our modified copy
                             st.session_state.modules_df_by_course[modules_selected_course] = updated_df
+                            
+                            # Increment editor key to force widget refresh
+                            st.session_state.editor_key += 1
+                            
                             st.rerun()
                         else:
                             st.warning("No se encontró ninguna fila vacía para actualizar.")
@@ -187,7 +196,6 @@ try:
                         st.warning("El último módulo no tiene fecha de fin definida.")
                 else:
                     st.warning("No se encontraron módulos con orden válido.")
-                st.rerun()
 
         # Add save button
         if st.button("💾 Guardar Cambios"):
@@ -225,6 +233,11 @@ try:
                 # Clean the state for the course to force a fresh reload next time
                 if modules_selected_course in st.session_state.modules_df_by_course:
                     del st.session_state.modules_df_by_course[modules_selected_course]
+                
+                # Increment editor key and set force refresh to ensure clean reload
+                st.session_state.editor_key += 1
+                st.session_state.force_refresh = True
+                
                 st.rerun()
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message
