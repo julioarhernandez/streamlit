@@ -136,66 +136,68 @@ try:
             key=editor_key
         )
 
+        print("\n\n----Edited DataFrame------\n\n", edited_df)
+
         # You update the session state with the (potentially problematic) edited data
-        st.session_state.modules_df_by_course[modules_selected_course] = edited_df
+        # st.session_state.modules_df_by_course[modules_selected_course] = edited_df
 
         # This block cleans the data immediately after it has been edited.
-        date_columns_to_reconvert = ["Fecha Inicio", "Fecha Fin"]
-        for date_col in date_columns_to_reconvert:
-            if date_col in st.session_state.modules_df_by_course[modules_selected_course].columns:
-                st.session_state.modules_df_by_course[modules_selected_course][date_col] = pd.to_datetime(
-                    st.session_state.modules_df_by_course[modules_selected_course][date_col], 
-                    errors='coerce'
-                )
+        # date_columns_to_reconvert = ["Fecha Inicio", "Fecha Fin"]
+        # for date_col in date_columns_to_reconvert:
+        #     if date_col in st.session_state.modules_df_by_course[modules_selected_course].columns:
+        #         st.session_state.modules_df_by_course[modules_selected_course][date_col] = pd.to_datetime(
+        #             st.session_state.modules_df_by_course[modules_selected_course][date_col], 
+        #             errors='coerce'
+        #         )
         # Re-assign edited_df to the corrected dataframe from session state for consistency
         edited_df = st.session_state.modules_df_by_course[modules_selected_course]
         
 
         # Handle date recalculation for empty start dates
-        if ((edited_df['Fecha Inicio'].isna()) | (edited_df['Fecha Fin'].isna())).any():
-            st.warning("Algunos módulos tienen fecha de inicio o fin vacía. Por favor, revise y complete la información antes de guardar.")
-            if st.button("Recalcular las fechas", key="recalcular_fechas"):
-                # Find the last module with a valid order number
-                valid_modules = edited_df[edited_df['Orden'].notna()]
-                if not valid_modules.empty:
-                    last_module = valid_modules.sort_values('Orden').iloc[-1]
-                    last_orden = last_module['Orden']
+        # if ((edited_df['Fecha Inicio'].isna()) | (edited_df['Fecha Fin'].isna())).any():
+        #     st.warning("Algunos módulos tienen fecha de inicio o fin vacía. Por favor, revise y complete la información antes de guardar.")
+        #     if st.button("Recalcular las fechas", key="recalcular_fechas"):
+        #         # Find the last module with a valid order number
+        #         valid_modules = edited_df[edited_df['Orden'].notna()]
+        #         if not valid_modules.empty:
+        #             last_module = valid_modules.sort_values('Orden').iloc[-1]
+        #             last_orden = last_module['Orden']
                     
-                    print(f"\n\nLast module with valid order:\n{last_module}")
+        #             print(f"\n\nLast module with valid order:\n{last_module}")
                     
-                    # Calculate the new start date (one day after the last module's end date)
-                    if pd.notna(last_module['Fecha Fin']):
-                        new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
+        #             # Calculate the new start date (one day after the last module's end date)
+        #             if pd.notna(last_module['Fecha Fin']):
+        #                 new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
                         
-                        # Find the row with None Orden and None Fecha Inicio
-                        mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
+        #                 # Find the row with None Orden and None Fecha Inicio
+        #                 mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
                         
-                        if mask.any():
-                            # Create a fresh copy of the session state dataframe
-                            updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
+        #                 if mask.any():
+        #                     # Create a fresh copy of the session state dataframe
+        #                     updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
                             
-                            # Update the start date of the empty row
-                            updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
+        #                     # Update the start date of the empty row
+        #                     updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
                             
-                            # Debug info
-                            print("\n\nUpdating empty row with start date:", new_start_date)
-                            print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
+        #                     # Debug info
+        #                     print("\n\nUpdating empty row with start date:", new_start_date)
+        #                     print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
 
-                            # Calculate the new end date (one week after the last module's start date)
+        #                     # Calculate the new end date (one week after the last module's start date)
                             
-                            # Update the session state with our modified copy
-                            st.session_state.modules_df_by_course[modules_selected_course] = updated_df
+        #                     # Update the session state with our modified copy
+        #                     st.session_state.modules_df_by_course[modules_selected_course] = updated_df
                             
-                            # Increment editor key to force widget refresh
-                            st.session_state.editor_key += 1
+        #                     # Increment editor key to force widget refresh
+        #                     st.session_state.editor_key += 1
                             
-                            st.rerun()
-                        else:
-                            st.warning("No se encontró ninguna fila vacía para actualizar.")
-                    else:
-                        st.warning("El último módulo no tiene fecha de fin definida.")
-                else:
-                    st.warning("No se encontraron módulos con orden válido.")
+        #                     st.rerun()
+        #                 else:
+        #                     st.warning("No se encontró ninguna fila vacía para actualizar.")
+        #             else:
+        #                 st.warning("El último módulo no tiene fecha de fin definida.")
+        #         else:
+        #             st.warning("No se encontraron módulos con orden válido.")
 
         # Add save button
         if st.button("💾 Guardar Cambios"):
