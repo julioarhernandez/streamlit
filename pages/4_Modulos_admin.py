@@ -130,8 +130,23 @@ try:
             key=f"main_editor_{modules_selected_course}"
         )
 
+        # You update the session state with the (potentially problematic) edited data
+        st.session_state.modules_df_by_course[modules_selected_course] = edited_df
+
+        # This block cleans the data immediately after it has been edited.
+        date_columns_to_reconvert = ["Fecha Inicio", "Fecha Fin"]
+        for date_col in date_columns_to_reconvert:
+            if date_col in st.session_state.modules_df_by_course[modules_selected_course].columns:
+                st.session_state.modules_df_by_course[modules_selected_course][date_col] = pd.to_datetime(
+                    st.session_state.modules_df_by_course[modules_selected_course][date_col], 
+                    errors='coerce'
+                )
+        # Re-assign edited_df to the corrected dataframe from session state for consistency
+        edited_df = st.session_state.modules_df_by_course[modules_selected_course]
+        
+
         # Handle date recalculation for empty start dates
-        if any(edited_df['Fecha Inicio'].isna() or edited_df['Fecha Fin'].isna()):
+        if ((edited_df['Fecha Inicio'].isna()) | (edited_df['Fecha Fin'].isna())).any():
             st.warning("Algunos módulos tienen fecha de inicio o fin vacía. Por favor, revise y complete la información antes de guardar.")
             if st.button("Recalcular las fechas", key="recalcular_fechas"):
                 # Find the last module with a valid order number
@@ -176,20 +191,40 @@ try:
 
         # Add save button
         if st.button("💾 Guardar Cambios"):
-            # Convert back to original column names for saving
-            # Use the dynamically created reverse_display_names map
-            edited_df_for_save = edited_df.rename(columns=reverse_display_names)
+            # Get the current state of the DataFrame from session_state as it reflects all edits and cleaning
+            current_edited_df = st.session_state.modules_df_by_course[modules_selected_course]
 
-            # Ensure all original columns are present in the dataframe to save
-            # This is important if `num_rows="dynamic"` was used and new rows were added,
-            # or if some columns were not in `display_columns`.
-            final_df_to_save = df.copy() # Start with the original loaded data
-            for col in edited_df_for_save.columns:
-                final_df_to_save[col] = edited_df_for_save[col]
+            # Rename display columns back to original DB names for saving
+            edited_df_for_save = current_edited_df.rename(columns=reverse_display_names)
 
-            # Save the changes
-            if save_modules_to_db(modules_selected_course, final_df_to_save):
+            # Re-introduce the hidden columns from the original 'df' to preserve them.
+            # We use the index to align the data correctly.
+            # This ensures 'module_id', 'firebase_key', etc., are kept for existing rows.
+            for col_to_preserve in df.columns:
+                if col_to_preserve not in edited_df_for_save.columns:
+                    # Align by index to avoid incorrect merging
+                    edited_df_for_save[col_to_preserve] = df[col_to_preserve]
+
+            # Convert the processed DataFrame to a list of dictionaries.
+            # This handles new rows and is a safe format for DB operations.
+            modules_to_save = edited_df_for_save.to_dict('records')
+
+            # Final formatting pass before saving
+            for module_data in modules_to_save:
+                # Format dates to string, which is safe for databases (e.g., Firestore)
+                for date_col in ['start_date', 'end_date']:
+                    if date_col in module_data and pd.notna(module_data[date_col]):
+                        # Convert pandas Timestamp to a string 'YYYY-MM-DD'
+                        module_data[date_col] = module_data[date_col].strftime('%Y-%m-%d')
+                    else:
+                        module_data[date_col] = None # Ensure empty dates are None
+            
+            # Now, save the changes using the properly prepared list of modules
+            if save_modules_to_db(modules_selected_course, modules_to_save):
                 st.success("¡Cambios guardados exitosamente!")
+                # Clean the state for the course to force a fresh reload next time
+                if modules_selected_course in st.session_state.modules_df_by_course:
+                    del st.session_state.modules_df_by_course[modules_selected_course]
                 st.rerun()
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message
