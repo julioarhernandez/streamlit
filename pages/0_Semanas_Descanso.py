@@ -4,6 +4,7 @@ import datetime
 # Assuming 'config' module has 'setup_page' and 'db' (Firebase instance)
 from config import setup_page, db 
 from utils import date_format
+from utils_admin import load_breaks
 
 # --- Page Setup and Login Check ---
 setup_page("Semanas de Descanso")
@@ -14,24 +15,7 @@ if not st.session_state.get('logged_in', False):
 
 # --- Database Operations ---
 
-def load_breaks():
-    """
-    Loads all 'breaks' data from the Firebase Realtime Database.
-    Handles cases where data is empty or not in expected dictionary format.
-    """
-    try:
-        # Create a fresh reference to the 'breaks' child node
-        breaks_ref = db.child("breaks")
-        breaks_data = breaks_ref.get().val() or {} # Get data, default to empty dict if None
-        
-        # Ensure the retrieved data is a dictionary
-        if not isinstance(breaks_data, dict):
-            st.warning(f"Se esperaba un diccionario para 'breaks', pero se obtuvo: {type(breaks_data)}. Retornando diccionario vacío.")
-            return {}
-        return breaks_data
-    except Exception as e:
-        st.error(f"Error al cargar las semanas de descanso: {e}")
-        return {}
+
 
 def save_break(break_id, break_data):
     """

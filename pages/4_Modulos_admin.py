@@ -54,9 +54,9 @@ if modules_selected_course: # Only show module selection if a course is selected
     st.subheader("2. Seleccionar Módulo")
 
 try:
+    
     module_options = admin_get_available_modules(modules_selected_course)
     print("\n\nmodule_options\n\n ----- ", module_options)
-
     if module_options:
         df = pd.DataFrame(module_options)
         print("\n\nAvailable columns in module data:", df.columns.tolist())
@@ -114,13 +114,65 @@ try:
             "Descripción": st.column_config.TextColumn(),
         }
 
+        # Initialize session state for this course if not exists
+        if modules_selected_course not in st.session_state.modules_df_by_course:
+            st.session_state.modules_df_by_course[modules_selected_course] = display_df.copy()
+
+        
+
         st.write("Editar módulos:")
+        # Use the session state version for the editor
         edited_df = st.data_editor(
-            display_df,
+            st.session_state.modules_df_by_course[modules_selected_course],
             use_container_width=True,
             num_rows="dynamic",
-            column_config=editor_column_config # Use the dynamically defined column_config
+            column_config=editor_column_config,
+            key=f"main_editor_{modules_selected_course}"
         )
+
+        # Handle date recalculation for empty start dates
+        if any(edited_df['Fecha Inicio'].isna() or edited_df['Fecha Fin'].isna()):
+            st.warning("Algunos módulos tienen fecha de inicio o fin vacía. Por favor, revise y complete la información antes de guardar.")
+            if st.button("Recalcular las fechas", key="recalcular_fechas"):
+                # Find the last module with a valid order number
+                valid_modules = edited_df[edited_df['Orden'].notna()]
+                if not valid_modules.empty:
+                    last_module = valid_modules.sort_values('Orden').iloc[-1]
+                    last_orden = last_module['Orden']
+                    
+                    print(f"\n\nLast module with valid order:\n{last_module}")
+                    
+                    # Calculate the new start date (one day after the last module's end date)
+                    if pd.notna(last_module['Fecha Fin']):
+                        new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
+                        
+                        # Find the row with None Orden and None Fecha Inicio
+                        mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
+                        
+                        if mask.any():
+                            # Create a fresh copy of the session state dataframe
+                            updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
+                            
+                            # Update the start date of the empty row
+                            updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
+                            
+                            # Debug info
+                            print("\n\nUpdating empty row with start date:", new_start_date)
+                            print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
+
+                            # Calculate the new end date (one week after the last module's start date)
+                            
+                            
+                            # Update the session state with our modified copy
+                            st.session_state.modules_df_by_course[modules_selected_course] = updated_df
+                            st.rerun()
+                        else:
+                            st.warning("No se encontró ninguna fila vacía para actualizar.")
+                    else:
+                        st.warning("El último módulo no tiene fecha de fin definida.")
+                else:
+                    st.warning("No se encontraron módulos con orden válido.")
+                st.rerun()
 
         # Add save button
         if st.button("💾 Guardar Cambios"):

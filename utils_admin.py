@@ -407,3 +407,23 @@ def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
     except Exception as e:
         st.error(f"Error saving modules: {str(e)}")
         return False
+
+
+def load_breaks():
+    """
+    Loads all 'breaks' data from the Firebase Realtime Database.
+    Handles cases where data is empty or not in expected dictionary format.
+    """
+    try:
+        # Create a fresh reference to the 'breaks' child node
+        breaks_ref = db.child("breaks")
+        breaks_data = breaks_ref.get().val() or {} # Get data, default to empty dict if None
+        
+        # Ensure the retrieved data is a dictionary
+        if not isinstance(breaks_data, dict):
+            st.warning(f"Se esperaba un diccionario para 'breaks', pero se obtuvo: {type(breaks_data)}. Retornando diccionario vacío.")
+            return {}
+        return breaks_data
+    except Exception as e:
+        st.error(f"Error al cargar las semanas de descanso: {e}")
+        return {}
