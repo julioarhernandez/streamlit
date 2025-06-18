@@ -408,7 +408,6 @@ def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
         st.error(f"Error saving modules: {str(e)}")
         return False
 
-
 def load_breaks():
     """
     Loads all 'breaks' data from the Firebase Realtime Database.
@@ -427,3 +426,65 @@ def load_breaks():
     except Exception as e:
         st.error(f"Error al cargar las semanas de descanso: {e}")
         return {}
+
+def load_breaks_from_db():
+    """Load breaks from Firebase and format them for date calculations."""
+    try:
+        breaks_ref = db.child("breaks").get()
+        if not breaks_ref.val():
+            return []
+            
+        breaks_list = []
+        for break_id, break_data in breaks_ref.val().items():
+            if not break_data or not isinstance(break_data, dict):
+                continue
+                
+            try:
+                start_date = datetime.datetime.strptime(break_data.get('start_date', ''), '%Y-%m-%d').date()
+                duration_weeks = int(break_data.get('duration_weeks', 1))
+                end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+                
+                breaks_list.append({
+                    'name': break_data.get('name', 'Semana de Descanso'),
+                    'start_date': start_date.strftime('%Y-%m-%d'),
+                    'end_date': end_date.strftime('%Y-%m-%d')
+                })
+            except (ValueError, KeyError) as e:
+                st.warning(f"Error al procesar semana de descanso {break_id}: {e}")
+                continue
+                
+        return breaks_list
+    except Exception as e:
+        st.error(f"Error al cargar semanas de descanso: {e}")
+        return []
+
+# --- DATE CALCULATION LOGIC ---
+
+def parse_breaks(breaks_data):
+    """
+    Convierte una lista de diccionarios de vacaciones en tuplas de fechas (inicio, fin).
+    Omite entradas inválidas.
+    """
+    parsed = []
+    for b in breaks_data:
+        try:
+            start = datetime.datetime.strptime(b['start_date'], '%Y-%m-%d').date()
+            end = datetime.datetime.strptime(b['end_date'], '%Y-%m-%d').date()
+            parsed.append((start, end))
+        except (ValueError, TypeError):
+            # Saltar entradas de vacaciones inválidas o incompletas
+            continue
+    return parsed
+
+def adjust_date_for_breaks(current_date, breaks):
+    """
+    Verifica si una fecha cae dentro de un período de vacaciones.
+    Si es así, retorna el día después de que las vacaciones terminan.
+    Si no, retorna la fecha original.
+    """
+    for b_start, b_end in breaks:
+        if b_start <= current_date <= b_end:
+            # La fecha está dentro de unas vacaciones, moverla al día después de las vacaciones
+            return b_end + datetime.timedelta(days=1)
+    # La fecha no está en vacaciones
+    return current_date

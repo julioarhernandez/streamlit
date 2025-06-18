@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from config import setup_page
-from utils_admin import admin_get_student_group_emails, save_modules_to_db, admin_get_available_modules
+from utils_admin import admin_get_student_group_emails, save_modules_to_db, admin_get_available_modules, load_breaks_from_db, parse_breaks, adjust_date_for_breaks
+import datetime
 
 # --- Page Setup and Login Check ---
 setup_page("Gestión de Módulos por Administrador")
@@ -49,6 +50,19 @@ if course_emails:
 else:
     st.warning("No se encontraron cursos disponibles.")
     modules_selected_course = None # Ensure it's explicitly None if no courses
+
+
+def calculate_dates(start_date):
+    breaks_data = load_breaks_from_db()
+    breaks = parse_breaks(breaks_data)
+    # Ensure start_date is a date object for comparison
+    if hasattr(start_date, 'date'):
+        start_date = start_date.date()
+    adjusted_start = adjust_date_for_breaks(start_date, breaks)
+    # Convert back to datetime for consistency with the rest of the app
+    if isinstance(adjusted_start, datetime.date):
+        return pd.Timestamp(adjusted_start)
+    return adjusted_start
 
 # --- Select Module ---
 if modules_selected_course: # Only show module selection if a course is selected
@@ -177,7 +191,8 @@ try:
                         
                         # Calculate the new start date (one day after the last module's end date)
                         if pd.notna(last_module['Fecha Fin']):
-                            new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
+                            new_start_date =calculate_dates(last_module['Fecha Fin'] + pd.DateOffset(days=1))
+                            # new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
                             print(f"\n\nNew start date:\n{new_start_date}")
                             # Find the row with None Fecha de inicio and None Fecha de fin
                             mask = (edited_df['Fecha Inicio'].isna()) & (edited_df['Fecha Fin'].isna())
