@@ -103,8 +103,14 @@ try:
     # If we have valid module_options, process them
     if module_options is not None and ((isinstance(module_options, pd.DataFrame) and not module_options.empty) or 
                                      (isinstance(module_options, (list, dict)) and len(module_options) > 0)):
-        # Convert to DataFrame if it's not already one
-        df = module_options if isinstance(module_options, pd.DataFrame) else pd.DataFrame(module_options)
+        # Convert to DataFrame if it's not already one and sort by 'Orden'
+        df = (module_options if isinstance(module_options, pd.DataFrame) 
+              else pd.DataFrame(module_options))
+
+        # Sort by 'credits' if it exists
+        if 'credits' in df.columns:
+            df = df.sort_values('credits', ascending=True).reset_index(drop=True)
+
         # st.write("\n\nAvailable columns in module data:", df.columns.tolist())
 
         # Define your primary column mapping for known columns
@@ -163,6 +169,7 @@ try:
         # Initialize session state for this course if not exists OR if force refresh is needed
         if (modules_selected_course not in st.session_state.modules_df_by_course or 
             st.session_state.force_refresh):
+            # Sort the DataFrame by 'Orden' column
             st.session_state.modules_df_by_course[modules_selected_course] = display_df.copy()
             st.session_state.force_refresh = False  # Reset force refresh flag
 
