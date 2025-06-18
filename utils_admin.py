@@ -544,17 +544,17 @@ def row_to_clean_dict(row: pd.Series) -> dict:
             clean[k] = v
     return clean
 
-def save_new_module_to_db(user_email: str, module_data: dict) -> bool:
+def save_new_module_to_db(user_email: str, module_data: dict) -> str:
     """
     Save a new module to Firebase, adding it to the modules list for the user.
     """
     try:
         user_modules_ref = db.child("modules").child(user_email)
-        user_modules_ref.push(module_data)
-        return True
+        result = user_modules_ref.push(module_data)
+        return result["name"]
     except Exception as e:
         st.error(f"Error al guardar el módulo: {str(e)}")
-        return False
+        return None
 
 def transform_module_input(raw: dict) -> dict:
     return {
@@ -565,7 +565,8 @@ def transform_module_input(raw: dict) -> dict:
         "fecha_inicio_1": raw.get("Fecha Inicio", ""),
         "fecha_fin_1": raw.get("Fecha Fin", ""),
         "created_at": datetime.datetime.now().isoformat(),
-        "module_id": str(uuid.uuid4()),  # unique module ID               # you can change this if dynamic
+        "module_id": str(uuid.uuid4()),  # unique module ID 
+        "firebase_key": "",              # you can change this if dynamic
         # firebase_key will be added AFTER saving to Firebase, if needed
     }
 

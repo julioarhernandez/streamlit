@@ -11,6 +11,13 @@ if not st.session_state.get('logged_in', False):
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
 
+if st.button("Limpiar Sesión"):
+    st.session_state.modules_df_by_course = {}
+    st.session_state.editor_key = 0
+    st.session_state.force_refresh = False
+    st.success("Sesión borrada. Recargando...")
+    st.rerun()
+
 # --- Initialize session state variables at the very top ---
 # This ensures they exist before any part of the script tries to access them.
 if 'editor_key' not in st.session_state:
@@ -64,6 +71,9 @@ def calculate_dates(start_date):
         return pd.Timestamp(adjusted_start)
     return adjusted_start
 
+def is_missing_firebase_key(val):
+    return pd.isna(val) or val in ["", "None", None]
+
 # --- Select Module ---
 if modules_selected_course: # Only show module selection if a course is selected
     st.divider()
@@ -71,11 +81,29 @@ if modules_selected_course: # Only show module selection if a course is selected
 
 try:
     st.write("\n\nmodules_selected_course----->> ", modules_selected_course)
-    module_options = admin_get_available_modules(modules_selected_course)
-    print("\n\nmodu froom db\n\n ----- ", module_options)
-    if module_options:
-        df = pd.DataFrame(module_options)
-        print("\n\nAvailable columns in module data:", df.columns.tolist())
+    
+    # Initialize module_options to None
+    module_options = None
+    
+    # Check if we have data in session state first
+    if modules_selected_course in st.session_state.modules_df_by_course:
+        module_options = st.session_state.modules_df_by_course[modules_selected_course]
+        print("\n\nmodule_options from session state\n\n ----- ", module_options)
+    
+    # If no data in session state, fetch from database
+    if module_options is None or (isinstance(module_options, (pd.DataFrame, list, dict)) and len(module_options) == 0):
+        module_data = admin_get_available_modules(modules_selected_course)
+        if module_data is not None and ((isinstance(module_data, pd.DataFrame) and not module_data.empty) or 
+                                       (isinstance(module_data, (list, dict)) and len(module_data) > 0)):
+            module_options = module_data
+            print("\n\nmodule_options from db\n\n ----- ", module_options)
+    
+    # If we have valid module_options, process them
+    if module_options is not None and ((isinstance(module_options, pd.DataFrame) and not module_options.empty) or 
+                                     (isinstance(module_options, (list, dict)) and len(module_options) > 0)):
+        # Convert to DataFrame if it's not already one
+        df = module_options if isinstance(module_options, pd.DataFrame) else pd.DataFrame(module_options)
+        st.write("\n\nAvailable columns in module data:", df.columns.tolist())
 
         # Define your primary column mapping for known columns
         column_mapping = {
@@ -87,7 +115,7 @@ try:
             'duration_weeks': 'Duración',
             'credits': 'Orden',
             'description': 'Descripción',
-            'firebase_key': 'Firebase Key'
+            'firebase_key': 'firebase_key'
         }
 
         # Dynamically create display_columns to include ALL columns present in the DataFrame
@@ -111,7 +139,7 @@ try:
         display_df = df.rename(columns=column_mapping)[display_columns].copy()
         
         # Hide specific columns from display
-        columns_to_hide = ["Ciclo", "Firebase Key", "label", "ID Módulo"]  # Add any other columns you want to hide here
+        columns_to_hide = ["Ciclo", "label", "ID Módulo"]  # Add any other columns you want to hide here
         display_df = display_df.drop(columns=[col for col in columns_to_hide if col in display_df.columns])
         
         # Convert date columns from string to datetime
@@ -140,6 +168,9 @@ try:
         
         # Create a unique key that changes when we need to force refresh
         editor_key = f"main_editor_{modules_selected_course}_{st.session_state.editor_key}"
+        # And when preparing the DataFrame for display, ensure firebase_key exists
+        if 'firebase_key' not in df.columns:
+            df['firebase_key'] = '' 
         
         # Use the session state version for the editor
         edited_df = st.data_editor(
@@ -232,27 +263,52 @@ try:
                 if st.button("💾 Guardar Cambios"):
                     # Rename display columns back to original DB names
                     edited_df_for_save = edited_df.rename(columns=reverse_display_names)
-                    new_rows = edited_df[~edited_df.apply(tuple, 1).isin(st.session_state.modules_df_by_course[modules_selected_course].apply(tuple, 1))]
-                    if not new_rows.empty:
-                        st.write("New rows:", new_rows)
-                        for _, row in new_rows.iterrows():
-                            st.write(transform_module_input(row_to_clean_dict(row)))
-                            if save_new_module_to_db(modules_selected_course, transform_module_input(row_to_clean_dict(row))):
-                                st.success("¡Cambios guardados exitosamente!")
-                                st.session_state.editor_key += 1
-                        # st.success(f"Se guardaron {len(new_rows)} fila(s).")
-                        st.session_state.df = edited_df.copy()
-                        st.success(f"Saved {len(new_rows)} new row(s) to Firebase.")
-                        st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
-                        # st.rerun()
-                    else:
-                        st.warning("No se encontraron filas nuevas para guardar.")
-                        try:
-                            sync_firebase_updates(st.session_state.modules_df_by_course[modules_selected_course], edited_df)
-                            st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
-                            st.success("Cambios sincronizados correctamente.")
-                        except Exception as e:
-                            st.error(f"Error al sincronizar con Firebase: {e}")
+                    old_df = st.session_state.modules_df_by_course[modules_selected_course]
+                    new_df = edited_df_for_save.copy()
+
+                    old_keys = set(old_df["firebase_key"].dropna().astype(str))
+                    new_keys = set(new_df["firebase_key"].dropna().astype(str))
+
+                    new_rows = new_df[new_df["firebase_key"].apply(is_missing_firebase_key)]
+
+                    for _, row in new_rows.iterrows():
+                        clean = row_to_clean_dict(row)
+                        data = transform_module_input(clean)
+                        firebase_key = save_new_module_to_db(modules_selected_course, data)
+                        print("\n\n----outside firebase key ----:", firebase_key)
+                        st.write("----Firebase key ----:", firebase_key)
+
+                        if firebase_key:
+                            print("\n\n----inside firebase key ----:", firebase_key)
+                            new_df.loc[row.name, "firebase_key"] = firebase_key
+                            st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()
+                            st.success(f"Fila nueva guardada con ID: {firebase_key}")
+                            st.session_state.editor_key += 1
+                            st.rerun()
+                    
+                    # new_rows = edited_df[~edited_df.apply(tuple, 1).isin(st.session_state.modules_df_by_course[modules_selected_course].apply(tuple, 1))]
+                    # if not new_rows.empty:
+                    #     print("\n\n----new rows ----:", new_rows)
+                    #     st.write("New rows:", new_rows)
+                    #     for _, row in new_rows.iterrows():
+                    #         st.write(transform_module_input(row_to_clean_dict(row)))
+
+                    #         # if save_new_module_to_db(modules_selected_course, transform_module_input(row_to_clean_dict(row))):
+                    #         #     st.success("¡Cambios guardados exitosamente!")
+                    #         #     st.session_state.editor_key += 1
+                    #     # st.success(f"Se guardaron {len(new_rows)} fila(s).")
+                    #     st.session_state.df = edited_df.copy()
+                    #     st.success(f"Saved {len(new_rows)} new row(s) to Firebase.")
+                    #     st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
+                    #     # st.rerun()
+                    # else:
+                    #     st.warning("No se encontraron filas nuevas para guardar.")
+                    #     try:
+                    #         sync_firebase_updates(st.session_state.modules_df_by_course[modules_selected_course], edited_df)
+                    #         st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
+                    #         st.success("Cambios sincronizados correctamente.")
+                    #     except Exception as e:
+                    #         st.error(f"Error al sincronizar con Firebase: {e}")
 
                     # --- IMPROVEMENT: Safely re-introduce hidden columns ---
                     # Get a list of columns that were in the original 'df' but not in the editor
