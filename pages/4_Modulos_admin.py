@@ -230,46 +230,46 @@ try:
                 # end date calculation
             if all(pd.notna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin', 'Duración', 'Orden']):
                 if st.button("💾 Guardar Cambios"):
-                    # Get the current state of the DataFrame from session_state as it reflects all edits and cleaning
-                    current_edited_df = edited_df
+                    # Rename display columns back to original DB names
+                    edited_df_for_save = edited_df.rename(columns=reverse_display_names)
 
-                    # Rename display columns back to original DB names for saving
-                    edited_df_for_save = current_edited_df.rename(columns=reverse_display_names)
-
-                    # Re-introduce the hidden columns from the original 'df' to preserve them.
-                    # We use the index to align the data correctly.
-                    # This ensures 'module_id', 'firebase_key', etc., are kept for existing rows.
-                    for col_to_preserve in df.columns:
-                        if col_to_preserve not in edited_df_for_save.columns:
-                            # Align by index to avoid incorrect merging
-                            edited_df_for_save[col_to_preserve] = df[col_to_preserve]
-
-                    # Convert the processed DataFrame to a list of dictionaries.
-                    # This handles new rows and is a safe format for DB operations.
+                    # --- IMPROVEMENT: Safely re-introduce hidden columns ---
+                    # Get a list of columns that were in the original 'df' but not in the editor
+                    cols_to_preserve = [col for col in df.columns if col not in edited_df_for_save.columns]
                     
+                    if cols_to_preserve:
+                        # Use a join on the index to safely merge the hidden columns.
+                        # This prevents misalignment if rows were deleted.
+                        edited_df_for_save = edited_df_for_save.join(df[cols_to_preserve])
+
+                    # Convert to list of dictionaries for processing
                     modules_to_save = edited_df_for_save.to_dict('records')
 
-                    # Final formatting pass before saving
+                    # --- Date formatting loop (your robust version is good) ---
                     for module_data in modules_to_save:
-                        # Format dates to string, which is safe for databases (e.g., Firestore)
                         for date_col in ['start_date', 'end_date']:
-                            if date_col in module_data and pd.notna(module_data[date_col]):
-                                # Convert pandas Timestamp to a string 'YYYY-MM-DD'
-                                module_data[date_col] = module_data[date_col].strftime('%Y-%m-%d')
-                            else:
-                                module_data[date_col] = None # Ensure empty dates are None
+                            if date_col in module_data:
+                                value = module_data[date_col]
+                                if pd.isna(value):
+                                    module_data[date_col] = None
+                                else:
+                                    try:
+                                        if hasattr(value, 'strftime'):
+                                            module_data[date_col] = value.strftime('%Y-%m-%d')
+                                        else:
+                                            module_data[date_col] = pd.to_datetime(value).strftime('%Y-%m-%d')
+                                    except Exception:
+                                        module_data[date_col] = None
                     
-                    # Now, save the changes using the properly prepared list of modules
+                    # --- FIX: Call the corrected save function ---
                     if save_modules_to_db(modules_selected_course, modules_to_save):
                         st.success("¡Cambios guardados exitosamente!")
-                        # Clean the state for the course to force a fresh reload next time
+                        
+                        # Your state management logic is excellent, no changes needed here
                         if modules_selected_course in st.session_state.modules_df_by_course:
                             del st.session_state.modules_df_by_course[modules_selected_course]
-                        
-                        # Increment editor key and set force refresh to ensure clean reload
                         st.session_state.editor_key += 1
                         st.session_state.force_refresh = True
-                        
                         st.rerun()
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message

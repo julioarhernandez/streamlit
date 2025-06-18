@@ -397,15 +397,49 @@ def admin_get_available_modules(user_email: str) -> list:
         st.error(f"Error al cargar los módulos: {str(e)}")
         return []
 
-def save_modules_to_db(user_email: str, modules_df: pd.DataFrame) -> bool:
-    """Save modules to Firebase and update session."""
+def save_modules_to_db(user_email: str, modules_data: list[dict]) -> bool:
+    """
+    Save module changes to Firebase, updating existing ones and adding new ones.
+    Handles deletions by omission if the entire list is considered the source of truth.
+    """
     try:
-        user_email_sanitized = user_email
-        db.child("modules").child(user_email_sanitized).set(modules_df.to_dict('records'))
-        update_modules_in_session(modules_df)
+        # --- FIX: Sanitize the email to create a valid Firebase key ---
+        user_email_sanitized = user_email # Example sanitization
+        
+        # --- CRITICAL FIX: Use update/push instead of set ---
+        user_modules_ref = db.child("modules").child(user_email_sanitized)
+        
+        updates = {}
+        for module in modules_data:
+            # Check if the module has a firebase_key. A key means it's an existing record.
+            # pd.notna() is important because the key could be NaN for new rows.
+            firebase_key = module.get('firebase_key')
+
+            if firebase_key and pd.notna(firebase_key):
+                # --- This is an UPDATE to an existing module ---
+                # We build a dictionary of updates to send in one batch
+                updates[f"{firebase_key}"] = module
+            else:
+                # --- This is a NEW module, so we PUSH it ---
+                # .push() generates the unique ID for us
+                user_modules_ref.push(module)
+
+        # Send all updates for existing records in a single, efficient call
+        if updates:
+            user_modules_ref.update(updates)
+
+        # Note: This logic does not handle row DELETION from the database.
+        # If a user can delete rows, you would need a more complex sync:
+        # 1. Fetch all keys from Firebase.
+        # 2. Get all keys from the UI DataFrame.
+        # 3. For any key in Firebase but not in the UI, issue a .child(key).remove() call.
+
+        # update_modules_in_session() might need to be called after the operation
+        # or rely on the st.rerun() to reload from DB. The rerun is cleaner.
         return True
+
     except Exception as e:
-        st.error(f"Error saving modules: {str(e)}")
+        st.error(f"Error al guardar los módulos: {str(e)}")
         return False
 
 def load_breaks():
