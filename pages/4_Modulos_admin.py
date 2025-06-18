@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import setup_page
-from utils_admin import update_module_to_db, admin_get_student_group_emails, save_new_module_to_db, admin_get_available_modules, load_breaks_from_db, parse_breaks, adjust_date_for_breaks, row_to_clean_dict, transform_module_input, sync_firebase_updates
+from utils_admin import delete_module_from_db, update_module_to_db, admin_get_student_group_emails, save_new_module_to_db, admin_get_available_modules, load_breaks_from_db, parse_breaks, adjust_date_for_breaks, row_to_clean_dict, transform_module_input, sync_firebase_updates
 import datetime
 import time
 
@@ -79,6 +79,7 @@ def is_missing_firebase_key(val):
 if modules_selected_course: # Only show module selection if a course is selected
     st.divider()
     st.subheader("2. Seleccionar Módulo")
+    st.info("Para guardar los cambios una vez que modifique la tabla de módulos, presione el botón 'Guardar Cambios'.")
 
 try:
     # st.write("\n\nmodules_selected_course----->> ", modules_selected_course)
@@ -304,7 +305,21 @@ try:
                             st.session_state.editor_key += 1
                             time.sleep(1)
                             st.rerun()
-                   
+
+                    # 🗑️ Detectar y eliminar filas eliminadas   
+                    deleted_keys = old_keys - new_keys
+                    for key in deleted_keys:
+                        try:
+                            delete_module_from_db(modules_selected_course, key)   
+                            # print(f"Nuevo DataFrame: {new_df[new_df["firebase_key"] != key]}")   
+                            new_df = new_df[new_df["firebase_key"] != key]
+                            st.session_state.modules_df_by_course[modules_selected_course] = new_df.copy()                     
+                            st.success(f"Módulo con ID {key} eliminado de la base de datos.")
+                            st.session_state.editor_key += 1
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al eliminar el módulo con ID {key}: {str(e)}")
                     
                     # new_rows = edited_df[~edited_df.apply(tuple, 1).isin(st.session_state.modules_df_by_course[modules_selected_course].apply(tuple, 1))]
                     # if not new_rows.empty:

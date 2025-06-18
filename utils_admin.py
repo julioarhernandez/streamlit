@@ -617,3 +617,9 @@ def update_module_to_db(course_id: str, firebase_key: str, module_data: dict):
         db.child("modules").child(course_id).child(firebase_key).update(module_data)
     except Exception as e:
         st.error(f"Error al actualizar el módulo: {str(e)}")
+
+def delete_module_from_db(course_id: str, firebase_key: str):
+    try:
+        db.child("modules").child(course_id).child(firebase_key).remove()
+    except Exception as e:
+        st.error(f"Error al eliminar el módulo: {str(e)}")
