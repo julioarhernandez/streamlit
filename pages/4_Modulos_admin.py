@@ -150,97 +150,107 @@ try:
         #             errors='coerce'
         #         )
         # Re-assign edited_df to the corrected dataframe from session state for consistency
-        edited_df = st.session_state.modules_df_by_course[modules_selected_course]
+        # edited_df = st.session_state.modules_df_by_course[modules_selected_course]
         
 
         # Handle date recalculation for empty start dates
-        # if ((edited_df['Fecha Inicio'].isna()) | (edited_df['Fecha Fin'].isna())).any():
-        #     st.warning("Algunos módulos tienen fecha de inicio o fin vacía. Por favor, revise y complete la información antes de guardar.")
-        #     if st.button("Recalcular las fechas", key="recalcular_fechas"):
-        #         # Find the last module with a valid order number
-        #         valid_modules = edited_df[edited_df['Orden'].notna()]
-        #         if not valid_modules.empty:
-        #             last_module = valid_modules.sort_values('Orden').iloc[-1]
-        #             last_orden = last_module['Orden']
-                    
-        #             print(f"\n\nLast module with valid order:\n{last_module}")
-                    
-        #             # Calculate the new start date (one day after the last module's end date)
-        #             if pd.notna(last_module['Fecha Fin']):
-        #                 new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
-                        
-        #                 # Find the row with None Orden and None Fecha Inicio
-        #                 mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
-                        
-        #                 if mask.any():
-        #                     # Create a fresh copy of the session state dataframe
-        #                     updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
-                            
-        #                     # Update the start date of the empty row
-        #                     updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
-                            
-        #                     # Debug info
-        #                     print("\n\nUpdating empty row with start date:", new_start_date)
-        #                     print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
-
-        #                     # Calculate the new end date (one week after the last module's start date)
-                            
-        #                     # Update the session state with our modified copy
-        #                     st.session_state.modules_df_by_course[modules_selected_course] = updated_df
-                            
-        #                     # Increment editor key to force widget refresh
-        #                     st.session_state.editor_key += 1
-                            
-        #                     st.rerun()
-        #                 else:
-        #                     st.warning("No se encontró ninguna fila vacía para actualizar.")
-        #             else:
-        #                 st.warning("El último módulo no tiene fecha de fin definida.")
-        #         else:
-        #             st.warning("No se encontraron módulos con orden válido.")
+       
 
         # Add save button
-        if st.button("💾 Guardar Cambios"):
-            # Get the current state of the DataFrame from session_state as it reflects all edits and cleaning
-            current_edited_df = st.session_state.modules_df_by_course[modules_selected_course]
 
-            # Rename display columns back to original DB names for saving
-            edited_df_for_save = current_edited_df.rename(columns=reverse_display_names)
-
-            # Re-introduce the hidden columns from the original 'df' to preserve them.
-            # We use the index to align the data correctly.
-            # This ensures 'module_id', 'firebase_key', etc., are kept for existing rows.
-            for col_to_preserve in df.columns:
-                if col_to_preserve not in edited_df_for_save.columns:
-                    # Align by index to avoid incorrect merging
-                    edited_df_for_save[col_to_preserve] = df[col_to_preserve]
-
-            # Convert the processed DataFrame to a list of dictionaries.
-            # This handles new rows and is a safe format for DB operations.
-            modules_to_save = edited_df_for_save.to_dict('records')
-
-            # Final formatting pass before saving
-            for module_data in modules_to_save:
-                # Format dates to string, which is safe for databases (e.g., Firestore)
-                for date_col in ['start_date', 'end_date']:
-                    if date_col in module_data and pd.notna(module_data[date_col]):
-                        # Convert pandas Timestamp to a string 'YYYY-MM-DD'
-                        module_data[date_col] = module_data[date_col].strftime('%Y-%m-%d')
-                    else:
-                        module_data[date_col] = None # Ensure empty dates are None
+        last_row = edited_df.iloc[-1]
+        # Check if all required fields are filled (using pd.notna for proper NaT handling)
+        if all(pd.notna(last_row[col]) for col in ['Duración', 'Orden']):
             
-            # Now, save the changes using the properly prepared list of modules
-            if save_modules_to_db(modules_selected_course, modules_to_save):
-                st.success("¡Cambios guardados exitosamente!")
-                # Clean the state for the course to force a fresh reload next time
-                if modules_selected_course in st.session_state.modules_df_by_course:
-                    del st.session_state.modules_df_by_course[modules_selected_course]
-                
-                # Increment editor key and set force refresh to ensure clean reload
-                st.session_state.editor_key += 1
-                st.session_state.force_refresh = True
-                
-                st.rerun()
+            # Only show the button if the last row has empty start and end dates
+            if all(pd.isna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin']):
+                # Check if there are any changes
+                if st.button("Recalcular las fechas", key="recalcular_fechas"):
+                    # Find the last module with a valid order number
+                    valid_modules = edited_df[edited_df['Orden'].notna()]
+                    if not valid_modules.empty:
+                        last_module = valid_modules.sort_values('Orden').iloc[-1]
+                        last_orden = last_module['Orden']
+                        
+                        print(f"\n\nLast module with valid order:\n{last_module}")
+                        
+                        # Calculate the new start date (one day after the last module's end date)
+                        if pd.notna(last_module['Fecha Fin']):
+                            new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
+                            
+                            # Find the row with None Orden and None Fecha Inicio
+                            mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
+                            
+                            if mask.any():
+                                # Create a fresh copy of the session state dataframe
+                                updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
+                                
+                                # Update the start date of the empty row
+                                updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
+                                
+                                # Debug info
+                                print("\n\nUpdating empty row with start date:", new_start_date)
+                                print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
+
+                                # Calculate the new end date (one week after the last module's start date)
+                                
+                                # Update the session state with our modified copy
+                                st.session_state.modules_df_by_course[modules_selected_course] = updated_df
+                                
+                                # Increment editor key to force widget refresh
+                                st.session_state.editor_key += 1
+                                
+                                st.rerun()
+                            else:
+                                st.warning("No se encontró ninguna fila vacía para actualizar.")
+                        else:
+                            st.warning("El último módulo no tiene fecha de fin definida.")
+                    else:
+                        st.warning("No se encontraron módulos con orden válido.")
+                # end date calculation
+            if all(pd.notna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin', 'Duración', 'Orden']):
+                if st.button("💾 Guardar Cambios"):
+                    # Get the current state of the DataFrame from session_state as it reflects all edits and cleaning
+                    current_edited_df = edited_df
+
+                    # Rename display columns back to original DB names for saving
+                    edited_df_for_save = current_edited_df.rename(columns=reverse_display_names)
+
+                    # Re-introduce the hidden columns from the original 'df' to preserve them.
+                    # We use the index to align the data correctly.
+                    # This ensures 'module_id', 'firebase_key', etc., are kept for existing rows.
+                    for col_to_preserve in df.columns:
+                        if col_to_preserve not in edited_df_for_save.columns:
+                            # Align by index to avoid incorrect merging
+                            edited_df_for_save[col_to_preserve] = df[col_to_preserve]
+
+                    # Convert the processed DataFrame to a list of dictionaries.
+                    # This handles new rows and is a safe format for DB operations.
+                    
+                    modules_to_save = edited_df_for_save.to_dict('records')
+
+                    # Final formatting pass before saving
+                    for module_data in modules_to_save:
+                        # Format dates to string, which is safe for databases (e.g., Firestore)
+                        for date_col in ['start_date', 'end_date']:
+                            if date_col in module_data and pd.notna(module_data[date_col]):
+                                # Convert pandas Timestamp to a string 'YYYY-MM-DD'
+                                module_data[date_col] = module_data[date_col].strftime('%Y-%m-%d')
+                            else:
+                                module_data[date_col] = None # Ensure empty dates are None
+                    
+                    # Now, save the changes using the properly prepared list of modules
+                    if save_modules_to_db(modules_selected_course, modules_to_save):
+                        st.success("¡Cambios guardados exitosamente!")
+                        # Clean the state for the course to force a fresh reload next time
+                        if modules_selected_course in st.session_state.modules_df_by_course:
+                            del st.session_state.modules_df_by_course[modules_selected_course]
+                        
+                        # Increment editor key and set force refresh to ensure clean reload
+                        st.session_state.editor_key += 1
+                        st.session_state.force_refresh = True
+                        
+                        st.rerun()
     else:
         st.info("No hay módulos disponibles. Por favor, agregue módulos.") # Keep this message
 except Exception as e:
