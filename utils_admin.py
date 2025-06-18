@@ -568,3 +568,45 @@ def transform_module_input(raw: dict) -> dict:
         "module_id": str(uuid.uuid4()),  # unique module ID               # you can change this if dynamic
         # firebase_key will be added AFTER saving to Firebase, if needed
     }
+
+def sync_firebase_updates(df_old: pd.DataFrame, df_new: pd.DataFrame):
+    """
+    Syncs changes between old and new DataFrames to Firebase:
+    - Deletes removed rows
+    - Updates modified rows
+    - Does NOT add new rows
+
+    Args:
+        df_old (pd.DataFrame): Original DataFrame with firebase_key
+        df_new (pd.DataFrame): Edited DataFrame with firebase_key
+    """
+    # Make sure indexes are clean
+    df_old = df_old.reset_index(drop=True)
+    df_new = df_new.reset_index(drop=True)
+
+    # Drop rows without firebase_key
+    df_old = df_old[df_old["firebase_key"] != ""]
+    df_new = df_new[df_new["firebase_key"] != ""]
+
+    # Find deleted rows
+    old_keys = set(df_old["firebase_key"])
+    new_keys = set(df_new["firebase_key"])
+    deleted_keys = old_keys - new_keys
+
+    for key in deleted_keys:
+        try:
+            db.child("modules").child(key).delete()
+        except Exception as e:
+            print(f"Error deleting {key}: {e}")
+
+    # Find modified rows
+    for key in new_keys:
+        new_row = df_new[df_new["firebase_key"] == key].iloc[0]
+        old_row = df_old[df_old["firebase_key"] == key].iloc[0]
+
+        if not new_row.equals(old_row):
+            try:
+                clean_data = row_to_clean_dict(new_row)
+                db.child("modules").child(key).update(clean_data)
+            except Exception as e:
+                print(f"Error updating {key}: {e}")

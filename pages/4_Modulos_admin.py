@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import setup_page
-from utils_admin import admin_get_student_group_emails, save_new_module_to_db, admin_get_available_modules, load_breaks_from_db, parse_breaks, adjust_date_for_breaks, row_to_clean_dict, transform_module_input
+from utils_admin import admin_get_student_group_emails, save_new_module_to_db, admin_get_available_modules, load_breaks_from_db, parse_breaks, adjust_date_for_breaks, row_to_clean_dict, transform_module_input, sync_firebase_updates
 import datetime
 
 # --- Page Setup and Login Check ---
@@ -245,6 +245,15 @@ try:
                         st.success(f"Saved {len(new_rows)} new row(s) to Firebase.")
                         st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
                         # st.rerun()
+                    else:
+                        st.warning("No se encontraron filas nuevas para guardar.")
+                        try:
+                            sync_firebase_updates(st.session_state.modules_df_by_course[modules_selected_course], edited_df)
+                            st.session_state.modules_df_by_course[modules_selected_course] = edited_df.copy()
+                            st.success("Cambios sincronizados correctamente.")
+                        except Exception as e:
+                            st.error(f"Error al sincronizar con Firebase: {e}")
+
                     # --- IMPROVEMENT: Safely re-introduce hidden columns ---
                     # Get a list of columns that were in the original 'df' but not in the editor
                     # cols_to_preserve = [col for col in df.columns if col not in edited_df_for_save.columns]
