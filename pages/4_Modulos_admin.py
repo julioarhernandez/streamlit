@@ -166,10 +166,11 @@ try:
             if all(pd.isna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin']):
                 # Check if there are any changes
                 if st.button("Recalcular las fechas", key="recalcular_fechas"):
-                    # Find the last module with a valid order number
-                    valid_modules = edited_df[edited_df['Orden'].notna()]
+                    # Find the last module with a valid order number minus 1
+                    last_orden = last_row['Orden'] - 1
+                    valid_modules = edited_df[edited_df['Orden'] == last_orden]
                     if not valid_modules.empty:
-                        last_module = valid_modules.sort_values('Orden').iloc[-1]
+                        last_module = valid_modules.sort_values('Orden').iloc[0]
                         last_orden = last_module['Orden']
                         
                         print(f"\n\nLast module with valid order:\n{last_module}")
@@ -177,13 +178,14 @@ try:
                         # Calculate the new start date (one day after the last module's end date)
                         if pd.notna(last_module['Fecha Fin']):
                             new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
-                            
-                            # Find the row with None Orden and None Fecha Inicio
-                            mask = (edited_df['Orden'].isna()) & (edited_df['Fecha Inicio'].isna())
+                            print(f"\n\nNew start date:\n{new_start_date}")
+                            # Find the row with None Fecha de inicio and None Fecha de fin
+                            mask = (edited_df['Fecha Inicio'].isna()) & (edited_df['Fecha Fin'].isna())
                             
                             if mask.any():
                                 # Create a fresh copy of the session state dataframe
-                                updated_df = st.session_state.modules_df_by_course[modules_selected_course].copy()
+                                updated_df = edited_df.copy()
+                                print("\n\n=----copy created - Updated DataFrame:\n", updated_df)
                                 
                                 # Update the start date of the empty row
                                 updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
@@ -195,10 +197,13 @@ try:
                                 # Calculate the new end date (one week after the last module's start date)
                                 
                                 # Update the session state with our modified copy
-                                st.session_state.modules_df_by_course[modules_selected_course] = updated_df
+                                # st.session_state.modules_df_by_course[modules_selected_course] = updated_df
                                 
                                 # Increment editor key to force widget refresh
-                                st.session_state.editor_key += 1
+                                # st.session_state.editor_key += 1
+
+                                edited_df = updated_df
+                                st.session_state.modules_df_by_course[modules_selected_course] = edited_df
                                 
                                 st.rerun()
                             else:
