@@ -611,3 +611,9 @@ def sync_firebase_updates(df_old: pd.DataFrame, df_new: pd.DataFrame):
                 db.child("modules").child(key).update(clean_data)
             except Exception as e:
                 print(f"Error updating {key}: {e}")
+
+def update_module_to_db(course_id: str, firebase_key: str, module_data: dict):
+    try:
+        db.child("modules").child(course_id).child(firebase_key).update(module_data)
+    except Exception as e:
+        st.error(f"Error al actualizar el módulo: {str(e)}")
