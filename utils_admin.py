@@ -1,8 +1,12 @@
 # c:\Users\JulioRodriguez\Documents\GitHub\streamlit\utils.py
 import streamlit as st
 import pandas as pd
+import uuid
+import numpy as np
 from config import db # Assuming db is your Firebase Realtime Database reference from config.py
-import datetime # Added for type hinting and date operations
+import datetime
+import time
+
 
 def admin_get_last_updated(table_name, course_email):
     """
@@ -296,7 +300,7 @@ def admin_save_students(course_email, students_df):
             st.error(f"Columns in DataFrame: {', '.join(df.columns)}")
         return False
 
-@st.cache_data
+@st.cache_data(ttl=1)
 def admin_get_available_modules(user_email: str) -> list:
     """
     Retrieve and process available modules for a user.
@@ -311,11 +315,11 @@ def admin_get_available_modules(user_email: str) -> list:
         # Create a fresh Firebase reference for this operation
         # Note: You should ensure 'db' is initialized before this function is called.
         modules_ref = db.child("modules").child(user_email).get()
-
-        if 'call_count' not in st.session_state:
-            st.session_state.call_count = 0
-        st.session_state.call_count += 1
-        print(f"\n{st.session_state.call_count} ---get_available_modules-data from firebase----\n", modules_ref.val())
+        # print("\n\nAvailable modules for user:", modules_ref.val())
+        # if 'call_count' not in st.session_state:
+        #     st.session_state.call_count = 0
+        # st.session_state.call_count += 1
+        # print(f"\n{st.session_state.call_count} ---get_available_modules-data from firebase----\n", modules_ref.val())
 
         if not modules_ref.val():
             return []
@@ -333,7 +337,7 @@ def admin_get_available_modules(user_email: str) -> list:
 
             # --- Extract ALL relevant module data fields ---
             # Debug: Print the raw module data
-            print(f"\nRaw module data for {module_id}:", module_data)
+            # print(f"\nRaw module data for {module_id}:", module_data)
             
             # Use .get() with a default value to avoid KeyError if a field is missing in Firebase
             start_date_str = module_data.get('fecha_inicio_1')
@@ -370,6 +374,7 @@ def admin_get_available_modules(user_email: str) -> list:
 
             # Only add the module if start_date is parsed successfully and is within cutoff
             if start_date_dt and start_date_dt >= cutoff_date:
+                print(f"\n\nAdding module {module_name} to options list...")
                 module_entry = {
                     'label': f"{module_name} (Ciclo {ciclo} - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
                     'module_id': module_id,
@@ -522,3 +527,44 @@ def adjust_date_for_breaks(current_date, breaks):
             return b_end + datetime.timedelta(days=1)
     # La fecha no está en vacaciones
     return current_date
+
+def row_to_clean_dict(row: pd.Series) -> dict:
+    """
+    • Converts NaN / None / pd.NA to "" (empty text)  
+    • Converts pandas.Timestamp → python datetime.datetime  
+    • Leaves every other value unchanged
+    """
+    clean = {}
+    for k, v in row.items():
+        if v is None or (isinstance(v, float) and np.isnan(v)) or v is pd.NA:
+            clean[k] = ""
+        elif isinstance(v, pd.Timestamp):
+            clean[k] = v.strftime("%Y-%m-%d")  # <- convert to string
+        else:
+            clean[k] = v
+    return clean
+
+def save_new_module_to_db(user_email: str, module_data: dict) -> bool:
+    """
+    Save a new module to Firebase, adding it to the modules list for the user.
+    """
+    try:
+        user_modules_ref = db.child("modules").child(user_email)
+        user_modules_ref.push(module_data)
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar el módulo: {str(e)}")
+        return False
+
+def transform_module_input(raw: dict) -> dict:
+    return {
+        "name": raw.get("Nombre Módulo", ""),
+        "description": raw.get("Descripción", ""),
+        "duration_weeks": raw.get("Duración", 1),
+        "credits": raw.get("Orden", 0),
+        "fecha_inicio_1": raw.get("Fecha Inicio", ""),
+        "fecha_fin_1": raw.get("Fecha Fin", ""),
+        "created_at": datetime.datetime.now().isoformat(),
+        "module_id": str(uuid.uuid4()),  # unique module ID               # you can change this if dynamic
+        # firebase_key will be added AFTER saving to Firebase, if needed
+    }
