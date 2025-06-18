@@ -163,7 +163,8 @@ try:
             "Fecha Fin": st.column_config.DateColumn(format="MM/DD/YYYY"),
             "Duración": st.column_config.NumberColumn(min_value=1, step=1),
             "Orden": st.column_config.NumberColumn(min_value=1, step=1),
-            "Descripción": st.column_config.TextColumn()
+            "Descripción": st.column_config.TextColumn(),
+            "firebase_key": st.column_config.TextColumn(disabled=True) 
         }
 
         # Initialize session state for this course if not exists OR if force refresh is needed
