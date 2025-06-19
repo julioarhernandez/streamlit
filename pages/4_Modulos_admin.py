@@ -27,7 +27,26 @@ if 'modules_df_by_course' not in st.session_state:
     st.session_state.modules_df_by_course = {} # This will store DataFrames per course
 if 'force_refresh' not in st.session_state:
     st.session_state.force_refresh = False
+if 'modules_date_updates' not in st.session_state:
+    st.session_state.modules_date_updates = {}
 # --- End Initialize session state variables ---
+
+
+date_updates = st.session_state.get("modules_date_updates", {})
+if date_updates:
+    for course_email, course_data in date_updates.items():
+        for firebase_key, module_data in course_data.items():
+            print("\n\n\n --------------- updating the db ----------- \n\n\n")
+            update_module_to_db(course_email, firebase_key, {
+                'fecha_inicio_1': module_data['Fecha Inicio'].strftime('%Y-%m-%d'),
+                'fecha_fin_1': module_data['Fecha Fin'].strftime('%Y-%m-%d')
+            })
+            # st.write("\n\nfirebase_key", firebase_key)
+            # st.write("\n\nfecha_inicio", module_data['Fecha Inicio'].strftime('%Y-%m-%d'))
+            # st.write("\n\nfecha_fin", module_data['Fecha Fin'].strftime('%Y-%m-%d'))
+           
+    st.session_state.modules_date_updates = {} # Reset the cache after updating Firebase
+
 
 # --- Select Course ---
 st.subheader("1. Seleccionar Curso")
@@ -217,6 +236,7 @@ try:
                     
                     # Calculate the new start date (one day after the first module's end date)
                     # Loop through the rows and calculate the dates
+                    changed_rows = {}
                     for index, row in edited_df.iterrows():
                         if pd.notna(row['Duración']):
                             # Calculate the new start date (one day after the previous module's end date)
@@ -233,48 +253,39 @@ try:
                             # Calculate the new end date (start date + duration*6 )
                             # new_end_date = calculate_dates(new_start_date + pd.DateOffset(days=row['Duración'] * 6))
                             new_end_date = new_start_date + pd.DateOffset(weeks=row['Duración']) - pd.DateOffset(days=1)
-                            edited_df.loc[index, 'Fecha Inicio'] = new_start_date
-                            edited_df.loc[index, 'Fecha Fin'] = new_end_date
-                            print(f"\n\nRow {index+1}:\n{new_start_date} - {new_end_date}")
+                            
+                            old_start = edited_df.loc[index, 'Fecha Inicio']
+                            old_end = edited_df.loc[index, 'Fecha Fin']
+
+                            if index == 0 or pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
+                                edited_df.loc[index, 'Fecha Inicio'] = new_start_date
+                                edited_df.loc[index, 'Fecha Fin'] = new_end_date
+                                firebase_key = edited_df.loc[index, 'firebase_key']
+
+                                changed_rows.setdefault(modules_selected_course, {})[firebase_key] = {
+                                    'Fecha Inicio': new_start_date,
+                                    'Fecha Fin': new_end_date
+                                }
+                            
 
                     print(f"\n\nFinal result:\n{edited_df}")
                     st.session_state.modules_df_by_course[modules_selected_course] = edited_df
+                    st.session_state.modules_date_updates = changed_rows
 
-                    # st.rerun()
-
-
-                    # if pd.notna(last_module['Fecha Fin']):
-                    #     new_start_date =calculate_dates(last_module['Fecha Fin'] + pd.DateOffset(days=1))
-                    #     # new_start_date = last_module['Fecha Fin'] + pd.DateOffset(days=1)
-                    #     print(f"\n\nNew start date:\n{new_start_date}")
-                    #     # Find the row with None Fecha de inicio and None Fecha de fin
-                    #     mask = (edited_df['Fecha Inicio'].isna()) & (edited_df['Fecha Fin'].isna())
-                        
-                    #     if mask.any():
-                    #         # Create a fresh copy of the session state dataframe
-                    #         updated_df = edited_df.copy()
-                    #         print("\n\n=----copy created - Updated DataFrame:\n", updated_df)
-                            
-                    #         # Update the start date of the empty row
-                    #         updated_df.loc[mask, 'Fecha Inicio'] = new_start_date
-                            
-                    #         # Debug info
-                    #         print("\n\nUpdating empty row with start date:", new_start_date)
-                    #         print("Updated row:", updated_df.loc[mask, ['Orden', 'Fecha Inicio', 'Fecha Fin']])
-
-                    #         edited_df = updated_df
-                    #         st.session_state.modules_df_by_course[modules_selected_course] = edited_df
-                            
-                    #         st.rerun()
-                    #     else:
-                    #         st.warning("No se encontró ninguna fila vacía para actualizar.")
-                    # else:
-                    #     st.warning("El último módulo no tiene fecha de fin definida.")
+                    st.rerun()
                 else:
                     st.warning("No se encontraron módulos con orden válido.")
             # end date calculation
             if all(pd.notna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin', 'Duración', 'Orden']):
                 if st.button("💾 Guardar Cambios"):
+                    
+
+                    # for key, updates in date_updates.items():
+                    #     idx = edited_df.index[edited_df['firebase_key'] == key]
+                    #     if not idx.empty:
+                    #         for field, value in updates.items():
+                    #             edited_df.loc[idx, field] = value
+                    
                     # Renombrar columnas visibles a nombres de base de datos
                     edited_df_for_save = edited_df.rename(columns=reverse_display_names)
                     old_df = st.session_state.modules_df_by_course[modules_selected_course]
