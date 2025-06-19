@@ -810,10 +810,11 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                         start_date_dt = datetime.datetime.fromisoformat(start_date)
                         if start_date_dt >= cutoff_date:
                             module_options.append({
-                                'label': f"{module_name} (Ciclo 1 - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
+                                'label': f"Inicio: {start_date_dt.strftime('%m/%d/%Y')} - {module_name}",
                                 'module_id': module_id,
                                 'ciclo': 1,
                                 'start_date': module_data['fecha_inicio_1'],
+                                'end_date': module_data['fecha_fin_1'],
                                 'module_name': module_name
                             })
                     except (ValueError, TypeError):

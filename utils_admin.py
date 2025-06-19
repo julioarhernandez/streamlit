@@ -239,7 +239,8 @@ def admin_save_students(course_email, students_df):
             'telefono': '',
             'modulo': '',
             'ciclo': '',
-            'fecha_inicio': None
+            'fecha_inicio': None,
+            'fecha_fin': None
         }
         
         for field, default_value in optional_fields.items():

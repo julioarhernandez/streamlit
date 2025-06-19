@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time
 import urllib.parse
 from config import setup_page
 from utils import get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
@@ -109,6 +110,7 @@ if selected_course: # Only show module selection if a course is selected
     try:
         modules_last_updated = get_last_updated('modules', selected_course)
         module_options = get_available_modules(selected_course, modules_last_updated)
+        print("\n\nmodule_options", module_options)
 
         if module_options:
             selected_module = st.selectbox(
@@ -202,17 +204,20 @@ if uploaded_file is not None:
             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
+                    'fecha_fin': st.session_state.selected_module.get('end_date'),
                     'modulo': st.session_state.selected_module.get('module_name'),
                     'ciclo': st.session_state.selected_module.get('ciclo'),
                     'firebase_key': st.session_state.selected_module_id
                 }
 
-                if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
+                if module_info['fecha_inicio'] and module_info['fecha_fin'] and isinstance(module_info['fecha_inicio'], str) and isinstance(module_info['fecha_fin'], str):
                     try:
                         # Convert to datetime and format consistently
                         module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
+                        module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
                         # Add module info to all uploaded students
                         df_upload['fecha_inicio'] = module_info['fecha_inicio']
+                        df_upload['fecha_fin'] = module_info['fecha_fin']
                         df_upload['modulo'] = module_info['modulo']
                         df_upload['ciclo'] = module_info['ciclo']
                         df_upload['modulo_id'] = module_info['firebase_key']
@@ -222,7 +227,7 @@ if uploaded_file is not None:
             st.subheader("Vista Previa del Archivo Subido")
             st.write(f"Total de estudiantes en el archivo: {len(df_upload)}")
             if module_info.get('fecha_inicio'):
-                st.info(f"Se asignará el módulo '{module_info['modulo']}' (Ciclo {module_info['ciclo']}) con fecha de inicio: {module_info['fecha_inicio']}")
+                st.info(f"Se asignará el módulo '{module_info['modulo']}' con fecha de inicio: {module_info['fecha_inicio']}")
             st.dataframe(df_upload)
 
             if st.button("Guardar Estudiantes Subidos (reemplaza la lista existente)", key="save_uploaded_students_btn"):
@@ -231,6 +236,7 @@ if uploaded_file is not None:
                     st.session_state.students_df_by_course[selected_course] = df_upload.copy() # Update session state copy
                     st.session_state.editor_key += 1 # Increment key to force data_editor refresh
                     get_current_students_data.clear() # Clear the cache for the loading function
+                    time.sleep(1)
                     st.rerun()
 
     except Exception as e:
@@ -255,9 +261,9 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             # Get the current students for the selected course from session state
             # This is already ensured by the loading block above
             current_students_df = st.session_state.students_df_by_course[selected_course].copy()
-
+            print("\nCurrent students df:\n", current_students_df)
             # Ensure all columns exist in current_students_df before operations
-            all_expected_cols = ['nombre', 'email', 'canvas_id', 'telefono', 'whatsapp', 'teams', 'fecha_inicio', 'modulo', 'ciclo', 'modulo_id']
+            all_expected_cols = ['nombre', 'email', 'canvas_id', 'telefono', 'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo', 'ciclo', 'modulo_id']
             for col in all_expected_cols:
                 if col not in current_students_df.columns:
                     current_students_df[col] = '' # Add missing columns as empty strings
@@ -292,6 +298,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             if 'selected_module' in st.session_state and 'selected_module_id' in st.session_state:
                 module_info = {
                     'fecha_inicio': st.session_state.selected_module.get('start_date'),
+                    'fecha_fin': st.session_state.selected_module.get('end_date'),
                     'modulo': get_module_name_by_id(selected_course, st.session_state.selected_module_id) or '',
                     'ciclo': st.session_state.selected_module.get('ciclo', ''),
                     'modulo_id': st.session_state.selected_module_id
@@ -300,6 +307,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
                     try:
                         module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
+                        module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
                     except (ValueError, TypeError):
                         module_info = {} # Reset if date conversion fails
 
@@ -321,6 +329,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         'whatsapp': create_whatsapp_link(telefono),
                         'teams': create_teams_link(email),
                         'fecha_inicio': module_info.get('fecha_inicio', ''),
+                        'fecha_fin': module_info.get('fecha_fin', ''),
                         'modulo': module_info.get('modulo', ''),
                         'ciclo': module_info.get('ciclo', ''),
                         'modulo_id': module_info.get('modulo_id', '')
@@ -368,7 +377,7 @@ if df_loaded is not None and not df_loaded.empty:
 
         # Ensure necessary columns for display/editing exist
         cols_to_ensure = ['Eliminar', 'nombre', 'email', 'canvas_id', 'telefono',
-                          'whatsapp', 'teams', 'fecha_inicio', 'modulo', 'ciclo', 'modulo_id']
+                          'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo', 'ciclo', 'modulo_id']
         for col in cols_to_ensure:
             if col not in df_display.columns:
                 df_display[col] = '' # Initialize missing columns with empty strings
@@ -392,7 +401,7 @@ if df_loaded is not None and not df_loaded.empty:
         # Define all columns that should be displayed in the editor
         display_columns = [
             'Eliminar', 'nombre', 'email', 'canvas_id', 'telefono',
-            'whatsapp', 'teams', 'fecha_inicio', 'modulo'
+            'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo'
         ]
 
         # Create the `editable_df` with only the columns intended for `st.data_editor`
@@ -448,6 +457,12 @@ if df_loaded is not None and not df_loaded.empty:
             "fecha_inicio": st.column_config.DateColumn(
                 "Fecha de Inicio",
                 help="Fecha de inicio en el módulo",
+                format="MM/DD/YYYY",
+                disabled=True
+            ),
+            "fecha_fin": st.column_config.DateColumn(
+                "Fecha de Fin",
+                help="Fecha de fin en el módulo",
                 format="MM/DD/YYYY",
                 disabled=True
             ),
