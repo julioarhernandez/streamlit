@@ -98,7 +98,7 @@ def is_missing_firebase_key(val):
 if modules_selected_course: # Only show module selection if a course is selected
     st.divider()
     st.subheader("2. Seleccionar Módulo")
-    st.info("Para guardar los cambios una vez que modifique la tabla de módulos, presione el botón 'Guardar Cambios'.")
+    st.info("Para guardar los cambios una vez que modifique la tabla de módulos, presione el botón 'Guardar Cambios'. Los campos Nombre de Modulo, Duración y Orden son obligatorios.")
 
 try:
     # st.write("\n\nmodules_selected_course----->> ", modules_selected_course)
@@ -179,7 +179,7 @@ try:
         editor_column_config = {
             "ID Módulo": st.column_config.TextColumn(disabled=True),
             "Fecha Inicio": st.column_config.DateColumn(format="MM/DD/YYYY"),
-            "Fecha Fin": st.column_config.DateColumn(format="MM/DD/YYYY", disabled=True),
+            "Fecha Fin": st.column_config.DateColumn(format="MM/DD/YYYY"),
             "Duración": st.column_config.NumberColumn(min_value=1, step=1),
             "Orden": st.column_config.NumberColumn(min_value=1, step=1),
             "Descripción": st.column_config.TextColumn(),

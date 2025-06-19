@@ -109,6 +109,7 @@ if selected_course: # Only show module selection if a course is selected
 
     try:
         modules_last_updated = get_last_updated('modules', selected_course)
+        st.info(f"Módulos actualizados el: {modules_last_updated}")
         module_options = get_available_modules(selected_course, modules_last_updated)
         print("\n\nmodule_options", module_options)
 
@@ -556,6 +557,17 @@ if df_loaded is not None and not df_loaded.empty:
             else:
                 st.warning("Por favor, seleccione al menos un estudiante para eliminar.") # This message is unlikely to be seen now as button is disabled
         # Removed the `elif any(edited_df['Eliminar']): pass` as it's redundant with the `disabled` logic
+
+        # --- Download CSV Button ---
+        expected_fields = ["nombre", "email", "canvas_id", "telefono"]
+        filtered_df = edited_df[expected_fields]
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar CSV",
+            data=csv,
+            file_name="estudiantes.csv",
+            mime='text/csv'
+        )
 
 elif df_loaded is not None and df_loaded.empty:
     st.info("La lista de estudiantes está actualmente vacía. Suba un archivo para agregar estudiantes.")

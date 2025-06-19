@@ -442,6 +442,7 @@ def save_modules_to_db(user_email: str, modules_data: list[dict]) -> bool:
 
         # update_modules_in_session() might need to be called after the operation
         # or rely on the st.rerun() to reload from DB. The rerun is cleaner.
+        admin_set_last_updated('modules', user_email)
         return True
 
     except Exception as e:
@@ -624,11 +625,13 @@ def sync_firebase_updates(df_old: pd.DataFrame, df_new: pd.DataFrame):
 def update_module_to_db(course_id: str, firebase_key: str, module_data: dict):
     try:
         db.child("modules").child(course_id).child(firebase_key).update(module_data)
+        admin_set_last_updated('modules', course_id)
     except Exception as e:
         st.error(f"Error al actualizar el módulo: {str(e)}")
 
 def delete_module_from_db(course_id: str, firebase_key: str):
     try:
         db.child("modules").child(course_id).child(firebase_key).remove()
+        admin_set_last_updated('modules', course_id)
     except Exception as e:
         st.error(f"Error al eliminar el módulo: {str(e)}")
