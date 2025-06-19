@@ -221,60 +221,77 @@ try:
             
             # recalculate dates    
             if st.button("Recalcular las fechas", key="recalcular_fechas"):
-                # Find the first module with a valid order number
-                first_orden = first_row['Orden']
-                valid_modules = edited_df[edited_df['Orden'] == first_orden]
-                if not valid_modules.empty:
-                    # Find the first module with a valid order number
+                today = pd.Timestamp.today().normalize()
 
+                # Encuentra el módulo que contiene la fecha de hoy
+                module_with_today = edited_df[
+                    (edited_df['Fecha Inicio'].notna()) &
+                    (edited_df['Fecha Fin'].notna()) &
+                    (edited_df['Fecha Inicio'] <= today) &
+                    (edited_df['Fecha Fin'] >= today)
+                ]
 
-                    # first_module = valid_modules.sort_values('Orden').iloc[0]
-                    first_orden = first_row['Orden']
+                if not module_with_today.empty:
+                    current_index = module_with_today.index[0]
+                    current_order = edited_df.loc[current_index, 'Orden']
+                    print(f"Hoy cae en el módulo con orden {current_order}")
 
-                    
-                    print(f"\n\nFirst module with valid order:\n{first_row}")
-                    
-                    # Calculate the new start date (one day after the first module's end date)
-                    # Loop through the rows and calculate the dates
                     changed_rows = {}
-                    for index, row in edited_df.iterrows():
-                        if pd.notna(row['Duración']):
-                            # Calculate the new start date (one day after the previous module's end date)
-                            print(f"\n\nfirst row date {edited_df.loc[index, 'Fecha Inicio']}")
-                            if index == 0:  # First row
-                                new_start_date = calculate_dates(edited_df.loc[index, 'Fecha Inicio'])
-                                print(f"\n\nfirst row new start date {new_start_date}")
-                            else:
-                                prev_row = edited_df.iloc[index - 1]
-                                if pd.notna(prev_row['Fecha Fin']):
-                                    new_start_date = calculate_dates(prev_row['Fecha Fin'] + pd.DateOffset(days=1))
-                                    print(f"\n\nother row new start date {new_start_date}")
+                    last_date_used = None
 
-                            # Calculate the new end date (start date + duration*6 )
-                            # new_end_date = calculate_dates(new_start_date + pd.DateOffset(days=row['Duración'] * 6))
+                    # 👉 Recalcula fechas hacia adelante desde el módulo actual
+                    for index, row in edited_df[edited_df['Orden'] >= current_order].sort_values('Orden').iterrows():
+                        if pd.notna(row['Duración']):
+                            if last_date_used is None:
+                                new_start_date = calculate_dates(row['Fecha Inicio'])
+                            else:
+                                new_start_date = calculate_dates(last_date_used + pd.DateOffset(days=1))
+
                             new_end_date = new_start_date + pd.DateOffset(weeks=row['Duración']) - pd.DateOffset(days=1)
-                            
+
                             old_start = edited_df.loc[index, 'Fecha Inicio']
                             old_end = edited_df.loc[index, 'Fecha Fin']
 
-                            if index == 0 or pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
+                            if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
                                 edited_df.loc[index, 'Fecha Inicio'] = new_start_date
                                 edited_df.loc[index, 'Fecha Fin'] = new_end_date
                                 firebase_key = edited_df.loc[index, 'firebase_key']
-
                                 changed_rows.setdefault(modules_selected_course, {})[firebase_key] = {
                                     'Fecha Inicio': new_start_date,
                                     'Fecha Fin': new_end_date
                                 }
-                            
 
-                    print(f"\n\nFinal result:\n{edited_df}")
+                            last_date_used = new_end_date
+
+                    # 🔁 Recalcula módulos anteriores al módulo actual si están en el pasado
+                    for index, row in edited_df[edited_df['Orden'] < current_order].sort_values('Orden').iterrows():
+                        if pd.notna(row['Duración']) and last_date_used is not None:
+                            new_start_date = calculate_dates(last_date_used + pd.DateOffset(days=1))
+                            new_end_date = new_start_date + pd.DateOffset(weeks=row['Duración']) - pd.DateOffset(days=1)
+
+                            old_start = edited_df.loc[index, 'Fecha Inicio']
+                            old_end = edited_df.loc[index, 'Fecha Fin']
+
+                            if pd.Timestamp(new_start_date) != pd.Timestamp(old_start) or pd.Timestamp(new_end_date) != pd.Timestamp(old_end):
+                                edited_df.loc[index, 'Fecha Inicio'] = new_start_date
+                                edited_df.loc[index, 'Fecha Fin'] = new_end_date
+                                firebase_key = edited_df.loc[index, 'firebase_key']
+                                changed_rows.setdefault(modules_selected_course, {})[firebase_key] = {
+                                    'Fecha Inicio': new_start_date,
+                                    'Fecha Fin': new_end_date
+                                }
+
+                            last_date_used = new_end_date
+
+                    # Guarda cambios
                     st.session_state.modules_df_by_course[modules_selected_course] = edited_df
                     st.session_state.modules_date_updates = changed_rows
 
+                    print(f"\n\nFinal result:\n{edited_df}")
                     st.rerun()
                 else:
-                    st.warning("No se encontraron módulos con orden válido.")
+                    st.warning("No se encontró ningún módulo correspondiente al día actual.")
+
             # end date calculation
             if all(pd.notna(last_row[col]) for col in ['Fecha Inicio', 'Fecha Fin', 'Duración', 'Orden']):
                 if st.button("💾 Guardar Cambios"):
