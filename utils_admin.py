@@ -481,7 +481,7 @@ def load_breaks_from_db():
             try:
                 start_date = datetime.datetime.strptime(break_data.get('start_date', ''), '%Y-%m-%d').date()
                 duration_weeks = int(break_data.get('duration_weeks', 1))
-                end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+                end_date = start_date + datetime.timedelta(days=duration_weeks * 7 - 1)
                 
                 breaks_list.append({
                     'name': break_data.get('name', 'Semana de Descanso'),
@@ -518,14 +518,22 @@ def parse_breaks(breaks_data):
 def adjust_date_for_breaks(current_date, breaks):
     """
     Verifica si una fecha cae dentro de un período de vacaciones.
-    Si es así, retorna el día después de que las vacaciones terminan.
-    Si no, retorna la fecha original.
+    Si es así, retorna el próximo lunes después del final del break.
+    Si no, retorna la misma fecha (ajustada a lunes si no lo es).
     """
     for b_start, b_end in breaks:
         if b_start <= current_date <= b_end:
-            # La fecha está dentro de unas vacaciones, moverla al día después de las vacaciones
-            return b_end + datetime.timedelta(days=1)
-    # La fecha no está en vacaciones
+            next_day = b_end + datetime.timedelta(days=1)
+            # Snap to next Monday
+            days_to_monday = (7 - next_day.weekday()) % 7
+            adjusted_date = next_day + datetime.timedelta(days=days_to_monday)
+            return adjusted_date
+
+    # Si no cae en vacaciones, también ajustar al lunes más cercano si no lo es
+    if current_date.weekday() != 0:
+        days_to_monday = (7 - current_date.weekday()) % 7
+        current_date += datetime.timedelta(days=days_to_monday)
+
     return current_date
 
 def row_to_clean_dict(row: pd.Series) -> dict:
