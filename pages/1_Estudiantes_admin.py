@@ -5,7 +5,7 @@ import time
 import urllib.parse
 from config import setup_page
 from utils import get_available_modules, get_last_updated, set_last_updated, get_module_name_by_id
-from utils_admin import admin_get_students_by_email, admin_get_student_group_emails, admin_load_students, admin_save_students
+from utils_admin import admin_get_students_by_email, admin_get_student_group_emails, admin_load_students, admin_save_students, load_breaks, parse_breaks, calculate_end_date, load_breaks_from_db
 
 def create_whatsapp_link(phone: str) -> str:
     if pd.isna(phone) or not str(phone).strip():
@@ -68,6 +68,49 @@ else:
     st.warning("No se encontraron cursos disponibles.")
     selected_course = None # Ensure it's explicitly None if no courses
 
+def get_end_date(start_date, num_weeks):
+    try:
+        start_date = datetime.datetime.fromisoformat(start_date)
+        
+        break_data = load_breaks_from_db()
+        break_list = parse_breaks(break_data)
+        end_date = calculate_end_date(start_date, num_weeks, break_list)
+        print("\n\nend_date", end_date)
+        return end_date.isoformat()
+    except (ValueError, TypeError):
+        return None
+
+def get_weeks(modules):
+    total_weeks = 0
+
+    if isinstance(modules, list):
+        for module in modules:
+            if isinstance(module, dict):
+                duration = module.get('duration_weeks') or module.get('Duración')
+                if duration is None:
+                    raise ValueError("Módulo sin duración definida (duration_weeks o 'Duración').")
+                try:
+                    duration_str = str(duration).strip()
+                    weeks = int(''.join(filter(str.isdigit, duration_str)))
+                    total_weeks += weeks
+                except (ValueError, TypeError):
+                    raise ValueError(f"Duración inválida: {duration}")
+    elif hasattr(modules, 'iterrows'):
+        for _, row in modules.iterrows():
+            duration = row.get('Duración') or row.get('duration_weeks')
+            if duration is None:
+                raise ValueError("Fila sin duración definida (duration_weeks o 'Duración').")
+            try:
+                duration_str = str(duration).strip()
+                weeks = int(''.join(filter(str.isdigit, duration_str)))
+                total_weeks += weeks
+            except (ValueError, TypeError):
+                raise ValueError(f"Duración inválida en fila: {duration}")
+    else:
+        raise TypeError("El parámetro 'modules' debe ser una lista de dicts o un DataFrame.")
+
+    return total_weeks
+    
 # --- Cached Student Data Loading Function ---
 # This function will load student data from the database and cache it.
 # It will re-run only if selected_course changes or the cache is explicitly cleared.
@@ -98,8 +141,8 @@ else:
     df_loaded = pd.DataFrame() # Provide an empty DataFrame if no course is selected
     st.info("Por favor, seleccione un curso para cargar los estudiantes.")
 
-print("\nLoaded df_loaded (from DB/Session State):\n", df_loaded)
-print("\nSession State (students_df_by_course):\n", st.session_state.students_df_by_course)
+# print("\nLoaded df_loaded (from DB/Session State):\n", df_loaded)
+# print("\nSession State (students_df_by_course):\n", st.session_state.students_df_by_course)
 
 
 # --- Select Module ---
@@ -111,7 +154,9 @@ if selected_course: # Only show module selection if a course is selected
         modules_last_updated = get_last_updated('modules', selected_course)
         st.info(f"Módulos actualizados el: {modules_last_updated}")
         module_options = get_available_modules(selected_course, modules_last_updated)
-        print("\n\nmodule_options", module_options)
+        st.session_state.module_data = module_options
+        # print("\n\nmodule_data", st.session_state.module_data)
+        # print("\n\nmodule_options", module_options)
 
         if module_options:
             selected_module = st.selectbox(
@@ -127,6 +172,7 @@ if selected_course: # Only show module selection if a course is selected
                 st.session_state.selected_module = selected_module
                 st.session_state.selected_module_id = selected_module['module_id']
                 st.session_state.selected_ciclo = selected_module['ciclo']
+
         else:
             st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
 
@@ -262,7 +308,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
             # Get the current students for the selected course from session state
             # This is already ensured by the loading block above
             current_students_df = st.session_state.students_df_by_course[selected_course].copy()
-            print("\nCurrent students df:\n", current_students_df)
+            # print("\nCurrent students df:\n", current_students_df)
             # Ensure all columns exist in current_students_df before operations
             all_expected_cols = ['nombre', 'email', 'canvas_id', 'telefono', 'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo', 'ciclo', 'modulo_id']
             for col in all_expected_cols:
@@ -308,7 +354,24 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
                     try:
                         module_info['fecha_inicio'] = datetime.datetime.fromisoformat(module_info['fecha_inicio']).strftime('%Y-%m-%d')
-                        module_info['fecha_fin'] = datetime.datetime.fromisoformat(module_info['fecha_fin']).strftime('%Y-%m-%d')
+                   
+
+                        # total_duration_weeks = 0
+                        # max_order = 0
+                        # modules = st.session_state.modules_df_by_course[selected_course]
+                        # for index, row in modules.iterrows():
+                        #     total_duration_weeks += row['duration_weeks']
+                        #     max_order = max(row['credits'], max_order)
+                        
+                        # module_info['total_duration_weeks'] = total_duration_weeks
+                        # module_info['max_order'] = max_order
+                
+                        # print("\n\nmodule_info", st.session_state.students_df_by_course[selected_course])
+                        print("\n\nmodule_info", st.session_state.module_data)
+                        num_weeks = get_weeks(st.session_state.module_data)
+                        print("\n\nnum_weeks", num_weeks)
+                        # module_info['fecha_fin'] = get_end_date(module_info['fecha_inicio'], num_weeks)
+                        # print("\n\nmodule_info", module_info['fecha_fin'])
                     except (ValueError, TypeError):
                         module_info = {} # Reset if date conversion fails
 

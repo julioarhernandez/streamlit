@@ -815,7 +815,8 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'ciclo': 1,
                                 'start_date': module_data['fecha_inicio_1'],
                                 'end_date': module_data['fecha_fin_1'],
-                                'module_name': module_name
+                                'module_name': module_name,
+                                'credits': module_data.get('credits', 0)
                             })
                     except (ValueError, TypeError):
                         continue

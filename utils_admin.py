@@ -538,6 +538,29 @@ def adjust_date_for_breaks(current_date, breaks):
 
     return current_date
 
+def calculate_end_date(start_date, num_weeks, breaks):
+    """
+    Calculates the end date from a start date and a number of weeks,
+    taking into account any breaks within that period.
+    The `breaks` parameter is expected to be a list of (start_date, end_date) tuples.
+    """
+    end_date = start_date + datetime.timedelta(weeks=num_weeks)
+
+    print("\n\nstart_date", start_date)
+    print("\n\nnum_weeks", num_weeks)
+    print("\n\nbreaks", breaks)
+    total_break_days = 0
+    for b_start, b_end in breaks:
+        if start_date <= b_end and end_date >= b_start:
+            overlap_start = max(start_date, b_start)
+            overlap_end = min(end_date, b_end)
+            # Include the end date in count
+            total_break_days += (overlap_end - overlap_start).days + 1  
+
+    end_date += datetime.timedelta(days=total_break_days)
+    print("\n\nend_date", end_date)
+    return end_date
+
 def row_to_clean_dict(row: pd.Series) -> dict:
     """
     • Converts NaN / None / pd.NA to "" (empty text)  
