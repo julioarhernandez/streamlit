@@ -33,17 +33,15 @@ if 'modules_date_updates' not in st.session_state:
 
 
 date_updates = st.session_state.get("modules_date_updates", {})
+
 if date_updates:
     for course_email, course_data in date_updates.items():
         for firebase_key, module_data in course_data.items():
-            print("\n\n\n --------------- updating the db ----------- \n\n\n")
-            update_module_to_db(course_email, firebase_key, {
-                'fecha_inicio_1': module_data['Fecha Inicio'].strftime('%Y-%m-%d'),
-                'fecha_fin_1': module_data['Fecha Fin'].strftime('%Y-%m-%d')
-            })
-            # st.write("\n\nfirebase_key", firebase_key)
-            # st.write("\n\nfecha_inicio", module_data['Fecha Inicio'].strftime('%Y-%m-%d'))
-            # st.write("\n\nfecha_fin", module_data['Fecha Fin'].strftime('%Y-%m-%d'))
+            if firebase_key is not None:
+                update_module_to_db(course_email, firebase_key, {
+                    'fecha_inicio_1': module_data['Fecha Inicio'].strftime('%Y-%m-%d'),
+                    'fecha_fin_1': module_data['Fecha Fin'].strftime('%Y-%m-%d')
+                })
            
     st.session_state.modules_date_updates = {} # Reset the cache after updating Firebase
 
@@ -81,9 +79,9 @@ else:
 
 def calculate_dates(start_date):
     breaks_data = load_breaks_from_db()
-    print("\n\nbreaks_data", breaks_data)
+    # print("\n\nbreaks_data", breaks_data)
     breaks = parse_breaks(breaks_data)
-    print("\n\nbreaks", breaks)
+    # print("\n\nbreaks", breaks)
     # Ensure start_date is a date object for comparison
     if hasattr(start_date, 'date'):
         start_date = start_date.date()
@@ -234,7 +232,7 @@ try:
                 if not module_with_today.empty:
                     current_index = module_with_today.index[0]
                     current_order = edited_df.loc[current_index, 'Orden']
-                    print(f"Hoy cae en el módulo con orden {current_order}")
+                    # print(f"Hoy cae en el módulo con orden {current_order}")
 
                     changed_rows = {}
                     last_date_used = None
@@ -287,7 +285,7 @@ try:
                     st.session_state.modules_df_by_course[modules_selected_course] = edited_df
                     st.session_state.modules_date_updates = changed_rows
 
-                    print(f"\n\nFinal result:\n{edited_df}")
+                    # print(f"\n\nFinal result:\n{edited_df}")
                     st.rerun()
                 else:
                     st.warning("No se encontró ningún módulo correspondiente al día actual.")
@@ -326,7 +324,7 @@ try:
                         fecha_fin = max_order_module['Fecha Fin']
                         if pd.notna(fecha_fin):
                             fecha_fin = fecha_fin + pd.DateOffset(days=1)
-                            print(f"\n\nFecha fin del módulo con mayor orden que no es el actual (ID: {firebase_key}): {fecha_fin}")
+                            # print(f"\n\nFecha fin del módulo con mayor orden que no es el actual (ID: {firebase_key}): {fecha_fin}")
                             # data["Fecha Fin"] = fecha_fin
                         
 
