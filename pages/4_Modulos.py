@@ -293,6 +293,17 @@ def invalidate_cache_and_rerun():
         del st.session_state.modules_df
     st.rerun()
 
+def highlight_current_module(row):
+    today = datetime.date.today()
+    try:
+        start_date = datetime.datetime.strptime(row['Inicio'], '%m/%d/%Y').date()
+        end_date = datetime.datetime.strptime(row['Fin'], '%m/%d/%Y').date()
+        if start_date <= today <= end_date:
+            return ['background-color: #e6f7ff'] * len(row)
+    except:
+        pass
+    return [''] * len(row)
+
 # --- MAIN APP LOGIC ---
 user_email = st.session_state.get('email')
 
@@ -349,7 +360,7 @@ if user_email:
         st.info("No hay módulos existentes. Contacte con el administrador.")
     else:
         st.subheader("Módulos")
-
+        st.info("Los módulos se muestran en orden cronológico, con el módulo actual destacado.")
         modules_df = modules_df.rename(columns={
             'name': 'Nombre', 
             'description': 'Descripción', 
@@ -358,13 +369,29 @@ if user_email:
             'fecha_inicio_1': 'Inicio',
             'fecha_fin_1': 'Fin'})
         modules_df = modules_df[['Nombre', 'Descripción', 'Orden', 'Duración (Semanas)', 'Inicio', 'Fin']]
+        # Convert 'Inicio' and 'Fin' to datetime
+        modules_df['Inicio'] = pd.to_datetime(modules_df['Inicio'], errors='coerce', dayfirst=True)
+        modules_df['Fin'] = pd.to_datetime(modules_df['Fin'], errors='coerce', dayfirst=True)
 
+        # Sort by actual datetime
+        modules_df = modules_df.sort_values('Inicio')
+
+        # Format as strings for display (after sorting)
         for col in ['Inicio', 'Fin']:
             if col in modules_df.columns:
-                modules_df[col] = modules_df[col].apply(lambda x: x.strftime('%m/%d/%Y') if isinstance(x, datetime.date) else x)
+                modules_df[col] = modules_df[col].apply(lambda x: x.strftime('%m/%d/%Y') if pd.notna(x) else '')
 
+        # Ensure correct types for other columns
+        modules_df['Orden'] = modules_df['Orden'].astype(int)
+        modules_df['Duración (Semanas)'] = modules_df['Duración (Semanas)'].astype(int)
 
-        st.dataframe(modules_df, hide_index=True)
+        column_properties = {
+            'Duración (Semanas)': 'width: 80px;',  # Adjust the width as needed
+            'Orden': 'width: 60px;'  # Also making Orden narrower for consistency
+        }
+
+        styled_df = modules_df.style.apply(highlight_current_module, axis=1)
+        st.dataframe(styled_df, hide_index=True, use_container_width=True)
         
         # # --- Automatic Recalculation Logic ---
         # breaks_data = load_breaks_from_db()
