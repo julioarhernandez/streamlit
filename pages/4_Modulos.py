@@ -71,8 +71,8 @@ if user_email:
             'fecha_fin_1': 'Fin'})
         modules_df = modules_df[['Nombre', 'Descripción', 'Orden', 'Duración (Semanas)', 'Inicio', 'Fin']]
         # Convert 'Inicio' and 'Fin' to datetime
-        modules_df['Inicio'] = pd.to_datetime(modules_df['Inicio'], errors='coerce', dayfirst=True)
-        modules_df['Fin'] = pd.to_datetime(modules_df['Fin'], errors='coerce', dayfirst=True)
+        modules_df['Inicio'] = pd.to_datetime(modules_df['Inicio'], format='%Y-%m-%d', errors='coerce')
+        modules_df['Fin'] = pd.to_datetime(modules_df['Fin'], format='%Y-%m-%d', errors='coerce')
 
         # Sort by actual datetime
         modules_df = modules_df.sort_values('Inicio')
