@@ -29,15 +29,6 @@ if 'modules_df_by_course' not in st.session_state:
 if 'current_module_id_for_today' not in st.session_state:
     st.session_state.current_module_id_for_today = None
 
-if 'current_module_id_for_today' in st.session_state and st.session_state.current_module_id_for_today is None:
-    result = get_module_on_date(st.session_state.get('email').replace('.', ','))
-    print("\n\nresult\n", result)
-    if result and 'module_id' in result:
-        st.session_state.current_module_id_for_today = result['firebase_key']
-        print("\n\ncurrent_module_id_for_today\n", result['firebase_key'])
-    else:
-        st.warning("No se encontró un módulo activo para hoy.")
-
 st.subheader("1. Seleccionar Curso")
 
 
@@ -57,7 +48,7 @@ if course_emails:
     }
 
     modules_selected_course = st.selectbox(
-        "Seleccione un Curso para agregar a los nuevos módulos:",
+        "Seleccione el Curso para el reporte de estudiantes:",
         options=full_emails_for_options,
         format_func=lambda x: course_options[x]['label'],
         index=0,
@@ -68,7 +59,7 @@ if course_emails:
     # print("\n\nstudents_last_updated\n", students_last_updated)
     df_loaded, _ = admin_load_students(modules_selected_course)
     # df_loaded = admin_load_students(modules_selected_course)
-    print("\n\ndf_loaded\n", df_loaded)
+    # print("\n\ndf_loaded\n", df_loaded)
 
     if df_loaded is None or df_loaded.empty:
         st.info("No hay estudiantes registrados.")
@@ -99,10 +90,21 @@ if course_emails:
             'modulo_fin_name': 'Módulo (Final)',
             }
 
+        if 'current_module_id_for_today' in st.session_state and st.session_state.current_module_id_for_today is None:
+            print("\n\nst.session_state.get('email')\n", modules_selected_course)
+            result = get_module_on_date(modules_selected_course)
+            print("\n\nresult\n", result)
+            if result and 'module_id' in result:
+                st.session_state.current_module_id_for_today = result['firebase_key']
+                print("\n\ncurrent_module_id_for_today\n", result['firebase_key'])
+            # else:
+            #     st.warning("No se encontró un módulo activo para hoy.")
+
         current_module_id = st.session_state.get('current_module_id_for_today')
 
+        print("\n\ncurrent_module_id\n", current_module_id)
         total_students = len(df_loaded)
-        print("total_students", total_students)
+        # print("total_students", total_students)
 
         df_loaded['_fecha_inicio_dt'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.date
         df_loaded['_fecha_fin_dt'] = pd.to_datetime(df_loaded['fecha_fin']).dt.date
@@ -133,10 +135,10 @@ if course_emails:
             (df_loaded['_fecha_inicio_dt'] <= today) &
             (df_loaded['_fecha_fin_dt'] >= today)
         ])
-        print("students_in_module", students_in_module)
+        # print("students_in_module", students_in_module)
 
         students_not_in_module = total_students - students_in_module
-        print("students_not_in_module", students_not_in_module)
+        # print("students_not_in_module", students_not_in_module)
 
         students_in_last_module = len(df_loaded[
             (df_loaded['_fecha_fin_dt'] <= today)
@@ -161,13 +163,13 @@ if course_emails:
             (df_loaded['_fecha_fin_dt'] >= today) &
             (df_loaded['modulo_fin_id'] == current_module_id)
         ])
-        print("students_in_last_module", students_in_last_module)
+        # print("students_in_last_module", students_in_last_module)
 
 
         students_finished = len(df_loaded[
             (df_loaded['_fecha_fin_dt'] <= today)
         ])
-        print("students_finished", students_finished)
+        # print("students_finished", students_finished)
 
 
         # ------ Highlight current module section ------
