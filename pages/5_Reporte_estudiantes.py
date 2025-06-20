@@ -27,10 +27,11 @@ if 'current_module_id_for_today' not in st.session_state:
 
 if 'current_module_id_for_today' in st.session_state and st.session_state.current_module_id_for_today is None:
     result = get_module_on_date(st.session_state.get('email').replace('.', ','))
-    print("\n\nresult\n", result)
+    # print("\n\nresult\n", result)
     if result and 'module_id' in result:
         st.session_state.current_module_id_for_today = result['firebase_key']
         print("\n\ncurrent_module_id_for_today\n", result['firebase_key'])
+        print("\n\nst.session_state.current_module_id_for_today\n", st.session_state.current_module_id_for_today)
     else:
         st.warning("No se encontró un módulo activo para hoy.")
 
@@ -45,7 +46,7 @@ if 'current_module_id_for_today' in st.session_state and st.session_state.curren
 students_last_updated = get_last_updated('students')
 # print("\n\nstudents_last_updated\n", students_last_updated)
 df_loaded, _ = load_students(students_last_updated)
-print("\n\ndf_loaded\n", df_loaded)
+# print("\n\ndf_loaded\n", df_loaded)
 
 if df_loaded is None or df_loaded.empty:
     st.info("No hay estudiantes registrados.")
@@ -79,7 +80,7 @@ else:
     current_module_id = st.session_state.get('current_module_id_for_today')
 
     total_students = len(df_loaded)
-    print("total_students", total_students)
+    # print("total_students", total_students)
 
     df_loaded['_fecha_inicio_dt'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.date
     df_loaded['_fecha_fin_dt'] = pd.to_datetime(df_loaded['fecha_fin']).dt.date
@@ -93,10 +94,10 @@ else:
         (df_loaded['_fecha_inicio_dt'] <= today) &
         (df_loaded['_fecha_fin_dt'] >= today)
     ])
-    print("students_in_module", students_in_module)
+    # print("students_in_module", students_in_module)
 
     students_not_in_module = total_students - students_in_module
-    print("students_not_in_module", students_not_in_module)
+    # print("students_not_in_module", students_not_in_module)
 
     students_in_last_module = len(df_loaded[
         (df_loaded['_fecha_fin_dt'] <= today)
@@ -121,13 +122,13 @@ else:
         (df_loaded['_fecha_fin_dt'] >= today) &
         (df_loaded['modulo_fin_id'] == current_module_id)
     ])
-    print("students_in_last_module", students_in_last_module)
+    # print("students_in_last_module", students_in_last_module)
 
 
     students_finished = len(df_loaded[
         (df_loaded['_fecha_fin_dt'] <= today)
     ])
-    print("students_finished", students_finished)
+    # print("students_finished", students_finished)
 
 
     # ------ Highlight current module section ------

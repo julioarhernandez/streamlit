@@ -32,6 +32,7 @@ def logout_user():
     st.session_state.logged_in = False
     st.session_state.email = None
     st.session_state.user_token = None
+    st.session_state.clear()
     # Potentially clear other session state variables related to the user
     st.rerun()
 
