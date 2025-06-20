@@ -24,6 +24,13 @@ if 'editor_key' not in st.session_state:
     st.session_state.editor_key = 0
 if 'students_df_by_course' not in st.session_state:
     st.session_state.students_df_by_course = {} # This will store DataFrames per course
+if 'last_module_credit' not in st.session_state:
+    st.session_state.last_module_credit = None
+if 'last_module_id' not in st.session_state:
+    st.session_state.last_module_id = None
+if 'last_module_name' not in st.session_state:
+    st.session_state.last_module_name = None
+
 # --- End Initialize session state variables ---
 
 
@@ -159,6 +166,27 @@ if selected_course: # Only show module selection if a course is selected
                 st.session_state.selected_module = selected_module
                 st.session_state.selected_module_id = selected_module['module_id']
                 st.session_state.selected_ciclo = selected_module['ciclo']
+
+                # Get previous module id and order based on the credit value
+                prev_module_id = None
+                if module_options:
+                    sorted_modules = sorted(module_options, key=lambda x: x['credits'])
+                    current_module_idx = sorted_modules.index(selected_module)
+                    if current_module_idx > 0:
+                        prev_module_id = sorted_modules[current_module_idx - 1]['module_id']
+                        prev_module_credit = sorted_modules[current_module_idx - 1]['credits']
+                        prev_module_name = sorted_modules[current_module_idx - 1]['module_name']
+                    else:
+                        last_module = sorted_modules[-1]
+                        prev_module_id = last_module['module_id']
+                        prev_module_credit = last_module['credits']
+                        prev_module_name = last_module['module_name']
+
+                st.session_state.last_module_credit = prev_module_credit
+                st.session_state.last_module_id = prev_module_id
+                st.session_state.last_module_name = prev_module_name
+
+
 
         else:
             st.info("No hay módulos disponibles. Por favor, agregue módulos en la sección de Módulos.")
@@ -384,7 +412,10 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         'fecha_fin': module_info.get('fecha_fin', ''),
                         'modulo': module_info.get('modulo', ''),
                         'ciclo': module_info.get('ciclo', ''),
-                        'modulo_id': module_info.get('modulo_id', '')
+                        'modulo_id': module_info.get('modulo_id', ''),
+                        'modulo_fin_order': st.session_state.last_module_credit,
+                        'modulo_fin_id': st.session_state.last_module_id,
+                        'modulo_fin_name': st.session_state.last_module_name
                     }
                     students_to_add_list.append(student_data)
                     added_count += 1
@@ -400,6 +431,7 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 new_students_df = pd.DataFrame(students_to_add_list)
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
 
+                # print("\n\nupdated_students_df", updated_students_df)
                 if admin_save_students(selected_course, updated_students_df): # Pass selected_course
                     st.success(f"¡{added_count} estudiante(s) agregado(s) exitosamente!")
                     if skipped_names:
@@ -429,7 +461,7 @@ if df_loaded is not None and not df_loaded.empty:
 
         # Ensure necessary columns for display/editing exist
         cols_to_ensure = ['Eliminar', 'nombre', 'email', 'canvas_id', 'telefono',
-                          'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo', 'ciclo', 'modulo_id']
+                          'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo', 'ciclo', 'modulo_id', 'modulo_fin_order', 'modulo_fin_id', 'modulo_fin_name']
         for col in cols_to_ensure:
             if col not in df_display.columns:
                 df_display[col] = '' # Initialize missing columns with empty strings
@@ -453,7 +485,7 @@ if df_loaded is not None and not df_loaded.empty:
         # Define all columns that should be displayed in the editor
         display_columns = [
             'Eliminar', 'nombre', 'email', 'canvas_id', 'telefono',
-            'whatsapp', 'teams', 'fecha_inicio', 'fecha_fin', 'modulo'
+            'whatsapp', 'teams', 'modulo', 'fecha_inicio', 'modulo_fin_name', 'fecha_fin', 'modulo_fin_order', 'modulo_fin_id',
         ]
 
         # Create the `editable_df` with only the columns intended for `st.data_editor`
@@ -502,7 +534,7 @@ if df_loaded is not None and not df_loaded.empty:
                 display_text="💻"
             ),
             "modulo": st.column_config.TextColumn(
-                "Módulo",
+                "Módulo (Inicio)",
                 help="Módulo actual del estudiante",
                 disabled=True
             ),
@@ -518,7 +550,13 @@ if df_loaded is not None and not df_loaded.empty:
                 format="MM/DD/YYYY",
                 disabled=True
             ),
-            # Hidden columns are not included in the column_order list, but can be defined here for clarity if needed.
+            "modulo_fin_name": st.column_config.TextColumn(
+                "Módulo (Fin)",
+                help="Módulo final del estudiante",
+                disabled=True
+            ),
+            "modulo_fin_id": None,
+            "modulo_fin_order": None,
             "ciclo": None, # Explicitly mark as hidden if not in display_columns
             "modulo_id": None # Explicitly mark as hidden if not in display_columns
         }

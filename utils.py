@@ -822,7 +822,7 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'end_date': module_data['fecha_fin_1'],
                                 'module_name': module_name,
                                 'credits': module_data.get('credits', 1),
-                                'duration_weeks': module_data.get('duration_weeks', 3)
+                                'duration_weeks': module_data.get('duration_weeks', 3),
                             })
                     except (ValueError, TypeError):
                         continue
