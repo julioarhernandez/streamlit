@@ -20,7 +20,8 @@ if st.session_state.get('admin', True):
         ],
         "Reportes": [
             # st.Page("pages/3_Reportes.py", title="Asistencia"),
-            st.Page("pages/5_Reporte_estudiantes_admin.py", title="Estudiantes")
+            st.Page("pages/5_Reporte_estudiantes_admin.py", title="Estudiantes"),
+            st.Page("pages/6_Buscar_estudiantes_Admin.py", title="Buscar")
         ],
     }
 else:
