@@ -900,6 +900,6 @@ def highlight_style(theme):
         'warning': "background-color: #fffce7; color: #926c05",
         'info': "background-color: #1c83e11a; color: #004280",
         'success': "background-color: #21c3541a; color: #21c3541a",
-        'error': "background-color: #f8d7da; color: #f8d7da"
+        'error': "background-color: #f8d7da; color: #7d353b"
     }
     return themes.get(theme, "")

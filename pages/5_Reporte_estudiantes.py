@@ -196,15 +196,7 @@ else:
     }
     df_renamed = df.rename(columns=column_renames)
 
-    # 3. Define the highlighting function
-    # This function will operate on the DataFrame that includes 'modulo_fin_id'
-    # def highlight_row(row):
-    #     # Check if the 'modulo_fin_id' of the row matches the current module
-    #     is_current_module = (row.get('modulo_fin_id') == current_module_id)
-    #     is_module_started = (row.get('fecha_inicio_dt') <= today)
-    #     return ['background-color: yellow' if is_current_module and is_module_started else '' for _ in row]
-
-    def highlight_row(row):
+    def highlight_row_warning(row):
         """
         Highlights a row in yellow if it's the current module and has already started.
         """
@@ -230,10 +222,32 @@ else:
 
         return ['' for _ in row]
 
+    def highlight_row_error(row):
+        """
+        Highlights a row in yellow if it's the current module and has already started.
+        """
+        try:
+            # Asegúrate de que la columna exista y no sea nula antes de comparar
+            end_date_val = row.get('Fecha de Finalización') # <--- CORREGIDO
+            fecha_fin_in_past = False
+            if pd.notna(end_date_val):
+                # Convierte a fecha para una comparación segura
+                end_date = pd.to_datetime(end_date_val).date()
+                fecha_fin_in_past = end_date < datetime.date.today()
+            
+            if fecha_fin_in_past:
+                return [highlight_style('error') for _ in row]
+
+        except Exception as e:
+            print(f"Error processing row in highlight_function: {row.to_dict()}")
+            print(f"Error was: {e}")
+
+        return ['' for _ in row]
+
     # 4. Decide whether to apply styling
     if current_module_id:
         # Apply the style to the renamed DataFrame
-        df_to_show = df_renamed.style.apply(highlight_row, axis=1)
+        df_to_show = df_renamed.style.apply(highlight_row_warning, axis=1).apply(highlight_row_error, axis=1)
     else:
         # If no ID is set, just use the regular DataFrame
         df_to_show = df_renamed
