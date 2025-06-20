@@ -70,46 +70,33 @@ else:
 
 def get_end_date(start_date, num_weeks):
     try:
-        start_date = datetime.datetime.fromisoformat(start_date)
-        
+        if isinstance(start_date, str):
+            start_date = datetime.datetime.fromisoformat(start_date)
+        elif isinstance(start_date, datetime.date):
+            start_date = datetime.datetime.combine(start_date, datetime.time.min)
+
+        start_date = start_date.date()  # <-- línea clave para evitar el error
+
         break_data = load_breaks_from_db()
         break_list = parse_breaks(break_data)
         end_date = calculate_end_date(start_date, num_weeks, break_list)
+
         print("\n\nend_date", end_date)
         return end_date.isoformat()
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        print("❌ Error al calcular la fecha final:", e)
         return None
 
-def get_weeks(modules):
-    total_weeks = 0
-
-    if isinstance(modules, list):
-        for module in modules:
-            if isinstance(module, dict):
-                duration = module.get('duration_weeks') or module.get('Duración')
-                if duration is None:
-                    raise ValueError("Módulo sin duración definida (duration_weeks o 'Duración').")
-                try:
-                    duration_str = str(duration).strip()
-                    weeks = int(''.join(filter(str.isdigit, duration_str)))
-                    total_weeks += weeks
-                except (ValueError, TypeError):
-                    raise ValueError(f"Duración inválida: {duration}")
-    elif hasattr(modules, 'iterrows'):
-        for _, row in modules.iterrows():
-            duration = row.get('Duración') or row.get('duration_weeks')
-            if duration is None:
-                raise ValueError("Fila sin duración definida (duration_weeks o 'Duración').")
-            try:
-                duration_str = str(duration).strip()
-                weeks = int(''.join(filter(str.isdigit, duration_str)))
-                total_weeks += weeks
-            except (ValueError, TypeError):
-                raise ValueError(f"Duración inválida en fila: {duration}")
-    else:
-        raise TypeError("El parámetro 'modules' debe ser una lista de dicts o un DataFrame.")
-
-    return total_weeks
+def get_weeks(selected_course):
+    total_duration_weeks = 0
+    modules = selected_course  # 'modules' is a list of dictionaries
+    
+    # Iterate directly over the list
+    for module in modules:
+        # Access the value using the dictionary key
+        total_duration_weeks += module['duration_weeks']
+        
+    return total_duration_weeks
     
 # --- Cached Student Data Loading Function ---
 # This function will load student data from the database and cache it.
@@ -348,7 +335,8 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                     'fecha_fin': st.session_state.selected_module.get('end_date'),
                     'modulo': get_module_name_by_id(selected_course, st.session_state.selected_module_id) or '',
                     'ciclo': st.session_state.selected_module.get('ciclo', ''),
-                    'modulo_id': st.session_state.selected_module_id
+                    'modulo_id': st.session_state.selected_module_id,
+                    'duration_weeks': st.session_state.selected_module.get('duration_weeks')
                 }
 
                 if module_info['fecha_inicio'] and isinstance(module_info['fecha_inicio'], str):
@@ -367,10 +355,10 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                         # module_info['max_order'] = max_order
                 
                         # print("\n\nmodule_info", st.session_state.students_df_by_course[selected_course])
-                        print("\n\nmodule_info", st.session_state.module_data)
+                        # print("\n\nmodule_info", st.session_state.module_data)
                         num_weeks = get_weeks(st.session_state.module_data)
-                        print("\n\nnum_weeks", num_weeks)
-                        # module_info['fecha_fin'] = get_end_date(module_info['fecha_inicio'], num_weeks)
+                        # print("\n\nnum_weeks", num_weeks)
+                        module_info['fecha_fin'] = get_end_date(module_info['fecha_inicio'], num_weeks)
                         # print("\n\nmodule_info", module_info['fecha_fin'])
                     except (ValueError, TypeError):
                         module_info = {} # Reset if date conversion fails

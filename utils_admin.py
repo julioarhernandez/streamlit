@@ -375,7 +375,7 @@ def admin_get_available_modules(user_email: str) -> list:
 
             # Only add the module if start_date is parsed successfully and is within cutoff
             if start_date_dt and start_date_dt >= cutoff_date:
-                print(f"\n\nAdding module {module_name} to options list...")
+                # print(f"\n\nAdding module {module_name} to options list...")
                 module_entry = {
                     'label': f"{module_name} (Ciclo {ciclo} - Inicia: {start_date_dt.strftime('%m/%d/%Y')})",
                     'module_id': module_id,
@@ -546,9 +546,9 @@ def calculate_end_date(start_date, num_weeks, breaks):
     """
     end_date = start_date + datetime.timedelta(weeks=num_weeks)
 
-    print("\n\nstart_date", start_date)
-    print("\n\nnum_weeks", num_weeks)
-    print("\n\nbreaks", breaks)
+    # print("\n\nstart_date from calculate_end_date", start_date)
+    # print("\n\nnum_weeks from calculate_end_date", num_weeks)
+    # print("\n\nbreaks from calculate_end_date", breaks)
     total_break_days = 0
     for b_start, b_end in breaks:
         if start_date <= b_end and end_date >= b_start:

@@ -816,7 +816,8 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'start_date': module_data['fecha_inicio_1'],
                                 'end_date': module_data['fecha_fin_1'],
                                 'module_name': module_name,
-                                'credits': module_data.get('credits', 0)
+                                'credits': module_data.get('credits', 1),
+                                'duration_weeks': module_data.get('duration_weeks', 3)
                             })
                     except (ValueError, TypeError):
                         continue
@@ -833,7 +834,10 @@ def get_available_modules(user_email: str, modules_last_updated: str) -> list:
                                 'module_id': module_id,
                                 'ciclo': 2,
                                 'start_date': module_data['fecha_inicio_2'],
-                                'module_name': module_name
+                                'end_date': module_data['fecha_fin_2'],
+                                'module_name': module_name,
+                                'credits': module_data.get('credits', 1),
+                                'duration_weeks': module_data.get('duration_weeks', 3)
                             })
                     except (ValueError, TypeError):
                         continue
