@@ -39,6 +39,18 @@ if not st.session_state.get('logged_in', False):
 #     df_students = st.session_state['all_students_df']
 
 
+def create_whatsapp_link(phone: str) -> str:
+    if pd.isna(phone) or not str(phone).strip():
+        return ""
+    phone = ''.join(filter(str.isdigit, str(phone)))
+    return f"https://wa.me/{phone}" if phone else ""
+
+def create_teams_link(email: str) -> str:
+    if pd.isna(email) or not str(email).strip() or '@' not in str(email):
+        return ""
+    return f"https://teams.microsoft.com/l/chat/0/0?users={email}"
+
+
 # Setup page title (now that config is done and user is logged in)
 setup_page("Buscador de Estudiantes por Administrador")
 
@@ -98,6 +110,22 @@ if submitted:
         # 'results' DataFrame will now include the 'course_email' column
         results = find_students(student_name, modules_selected_course)
 
+        # Add WhatsApp Link column
+        if 'telefono' in results.columns and not results.empty:
+            results['Whatsapp Link'] = results['telefono'].apply(create_whatsapp_link)
+        else:
+            # If 'telefono' column doesn't exist or results are empty, add an empty column
+            results['Whatsapp Link'] = '' # Initialize with empty strings
+
+        # Add Teams Link column
+        if 'email' in results.columns and not results.empty:
+            results['Teams Link'] = results['email'].apply(create_teams_link)
+        else:
+            # If 'email' column doesn't exist or results are empty, add an empty column
+            results['Teams Link'] = '' # Initialize with empty strings
+
+
+
         # Strip '@iti,edu' from the 'course_email' column if it exists and is a string
         if 'course_email' in results.columns and not results.empty:
             # Apply the stripping operation. Use .str accessor for string methods on Series.
@@ -127,7 +155,7 @@ if submitted:
         # This list also defines the order of the columns.
         columns_to_display_order = [
             'course_email', 'nombre', 'email', 'telefono', 'modulo', 'fecha_inicio',
-            'modulo_fin_name', 'fecha_fin', 
+            'modulo_fin_name', 'fecha_fin', 'Whatsapp Link', 'Teams Link'
         ]
 
         # Filter the DataFrame to only include the columns you want to display
@@ -143,7 +171,9 @@ if submitted:
             'fecha_inicio': 'Fecha de Inicio',
             'modulo_fin_name': 'Módulo (Final)',
             'fecha_fin': 'Fecha de Finalización',
-            'course_email': 'Curso' # Added translation for course_email
+            'course_email': 'Curso', # Added translation for course_email
+            'Whatsapp Link': 'WhatsApp', # Renamed for display
+            'Teams Link': 'Teams'       # Renamed for display
         }
         
         # Identify columns present in results AND in our desired display list
@@ -166,7 +196,27 @@ if submitted:
             course_message = modules_selected_course.split('@')[0] if modules_selected_course else 'todos los cursos'
             
             st.success(f"✅ Se encontraron {len(display_df)} estudiante(s) con **{student_name}** en **{course_message}**")
-            st.dataframe(display_df, use_container_width=True, hide_index=True) # Using st.dataframe for better presentation
+
+            column_configuration = {
+                "WhatsApp": st.column_config.LinkColumn(
+                    "WhatsApp",
+                    help="Click para enviar mensaje por WhatsApp",
+                    display_text="Chat", # Text displayed for the link
+                    width="small" # Adjust width as needed
+                ),
+                "Teams": st.column_config.LinkColumn(
+                    "Teams",
+                    help="Click para iniciar chat en Microsoft Teams",
+                    display_text="Chat", # Text displayed for the link
+                    width="small"
+                ),
+            }
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config=column_configuration # Pass the configuration here
+            )
         else:
             st.warning(" ⚠️ No se encontraron estudiantes que coincidan con los criterios de búsqueda.")
     else:
