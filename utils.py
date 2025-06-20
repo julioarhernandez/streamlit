@@ -694,30 +694,24 @@ def get_highest_module_credit(user_email: str, modules_last_updated: str) -> int
         return 0
 
 @st.cache_data
-def get_module_on_date(user_email: str, target_date: datetime.date = None, modules_last_updated: str = None) -> dict:
+def get_module_on_date(user_email: str, target_date: datetime.date = None) -> dict:
     """
-    Find a module that contains the specified date within any of its cycles.
+    Finds the module active on a given date for the user.
     
     Args:
         user_email: The user's email (with . replaced with ,)
         target_date: The date to check (defaults to today)
-        
+
     Returns:
         dict: Module information if found, None otherwise
-        {
-            'module_id': str,
-            'module_name': str,
-            'ciclo': int,
-            'start_date': str (ISO format),
-            'end_date': str (ISO format)
-            'credits': int
-        }
     """
+    print("\n\ntarget_date\n", target_date)
+    print("\n\nuser_email\n", user_email)
+
     if target_date is None:
         target_date = datetime.date.today()
-    
+
     try:
-        # Create a fresh Firebase reference for this operation
         modules_ref = db.child("modules").child(user_email).get()
 
         if 'call_count' not in st.session_state:
@@ -725,53 +719,49 @@ def get_module_on_date(user_email: str, target_date: datetime.date = None, modul
         st.session_state.call_count += 1
         print(f"\n{st.session_state.call_count} ---get_module_on_date-data from firebase----\n", modules_ref.val())
 
-        if not modules_ref.val():
+        modules_data = modules_ref.val()
+        if not modules_data:
             return None
-            
+
         target_datetime = datetime.datetime.combine(target_date, datetime.time())
-        
-        for module_id, module_data in modules_ref.val().items():
+
+        for module_key, module_data in modules_data.items():
             if not module_data:
                 continue
-                
-            module_name = module_data.get('name', 'Módulo sin nombre')
-            
-            # Check both cycles
-            for ciclo in [1, 2]:
-                start_key = f'ciclo{ciclo}_inicio'
-                end_key = f'ciclo{ciclo}_fin'
-                
-                if start_key in module_data and module_data[start_key]:
-                    try:
-                        start_date = datetime.datetime.fromisoformat(module_data[start_key])
-                        end_date = None
-                        
-                        # If end date is not specified, assume 2 months duration
-                        if end_key in module_data and module_data[end_key]:
-                            end_date = datetime.datetime.fromisoformat(module_data[end_key])
-                        else:
-                            end_date = start_date + datetime.timedelta(days=60)  # Default 2 months duration
-                        
-                        # Check if target date is within the module's date range
-                        if start_date <= target_datetime <= end_date:
-                            return {
-                                'module_id': module_id,
-                                'module_name': module_name,
-                                'ciclo': ciclo,
-                                'start_date': start_date.isoformat(),
-                                'end_date': end_date.isoformat(),
-                                'credits': module_data.get('credits', 0)
-                            }
-                            
-                    except (ValueError, TypeError) as e:
-                        print(f"Error processing module {module_id} ciclo {ciclo}: {e}")
-                        continue
-        
+
+            # Parse start and end dates
+            start_str = module_data.get("fecha_inicio_1")
+            end_str = module_data.get("fecha_fin_1")
+
+            try:
+                if not start_str or not end_str:
+                    continue
+
+                start_date = datetime.datetime.fromisoformat(start_str)
+                end_date = datetime.datetime.fromisoformat(end_str)
+
+                if start_date <= target_datetime <= end_date:
+                    return {
+                        'firebase_key': module_key,
+                        'module_id': module_data.get('module_id', module_key),
+                        'module_name': module_data.get('name', 'Módulo sin nombre'),
+                        'ciclo': module_data.get('ciclo', 1),
+                        'start_date': start_date.isoformat(),
+                        'end_date': end_date.isoformat(),
+                        'credits': module_data.get('credits', 0)
+                    }
+
+            except (ValueError, TypeError) as e:
+                print(f"Error processing module {module_key}: {e}")
+                continue
+
         return None
-        
+
     except Exception as e:
         st.error(f"Error al buscar módulo para la fecha: {str(e)}")
         return None
+
+
 
 @st.cache_data
 def get_available_modules(user_email: str, modules_last_updated: str) -> list:
