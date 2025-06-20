@@ -6,3 +6,5 @@ base = "light"
 # textColor = "#4A3B31"
 # font = "sans serif"
 # borderRadius = 0.3
+[browser]
+gatherUsageStats = false

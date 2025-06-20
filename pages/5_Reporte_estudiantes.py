@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from config import setup_page # Assuming db is implicitly used by load_attendance via utils
+from config import setup_page
 from utils import (
-    load_attendance, load_students, save_students,
-    get_module_on_date, get_highest_module_credit,
-    format_date_for_display, create_filename_date_range,
-    get_student_start_date, date_format, get_attendance_dates
+    load_students,
+    get_module_on_date, get_highest_module_credit, get_last_updated,
+    get_module_name_by_id, load_modules, highlight_style
 )
 
 # --- Login Check ---
@@ -17,223 +16,272 @@ if not st.session_state.get('logged_in', False):
 # --- End Login Check ---
 
 setup_page("Reporte de Estudiantes")
-df_loaded, _ = load_students()
 
-# Remove 'ciclo' column if it exists
-if 'ciclo' in df_loaded.columns:
-    df_loaded = df_loaded.drop(columns=['ciclo'])
+# Module section
 
-# Manual Spanish day name mapping to avoid locale/encoding issues
-SPANISH_DAY_NAMES = {
-    "Monday": "Lunes",
-    "Tuesday": "Martes",
-    "Wednesday": "Miércoles",
-    "Thursday": "Jueves",
-    "Friday": "Viernes",
-    "Saturday": "Sábado",
-    "Sunday": "Domingo"
-}
+if 'modules_df' not in st.session_state:
+    st.session_state.modules_df = None
 
-# Main UI
+if 'current_module_id_for_today' not in st.session_state:
+    st.session_state.current_module_id_for_today = None
 
-# Date selectors for range
-today = datetime.date.today()
-# Default start date to the first day of the current month for a more common report view
-default_start_date = today.replace(day=1) 
-
-# Format date inputs with MM/DD/YYYY format
-# col1, col2 = st.columns(2)
+if 'current_module_id_for_today' in st.session_state and st.session_state.current_module_id_for_today is None:
+    result = get_module_on_date(st.session_state.get('email').replace('.', ','))
+    print("\n\nresult\n", result)
+    if result and 'module_id' in result:
+        st.session_state.current_module_id_for_today = result['firebase_key']
+        print("\n\ncurrent_module_id_for_today\n", result['firebase_key'])
+    else:
+        st.warning("No se encontró un módulo activo para hoy.")
 
 
+# st.button(
+#     "Limpiar Módulo Actual",
+#     on_click=lambda: st.session_state.update({"current_module_id_for_today": None}),
+#     help="Borra el módulo actual guardado en la sesión actual."
+# )
 
-# --- Helper Functions ---
-def calculate_remaining_modules(row):
-    try:
-        student_name = row.get('nombre', 'desconocido')
-        user_email = st.session_state.get('email', '').replace('.', ',')
-        
-        # Get the student's start date
-        start_date_str = row.get('fecha_inicio')
-        if not start_date_str or pd.isna(start_date_str):
-            return 'Sin fecha de inicio'
-            
-        # Get the module for the student's start date
-        start_date = pd.to_datetime(start_date_str).date()
-        student_module = get_module_on_date(user_email, start_date)
-        
-        if not student_module:
-            return 'Módulo no encontrado'
-            
-        # Get the student's starting module credit
-        student_credit = int(student_module['credits'])
-        max_credit = get_highest_module_credit(user_email)
-        
-        print(f"Crédito del estudiante: {student_credit}, Máximo crédito: {max_credit}")
-        
-        if max_credit <= 1:
-            return '0'  # Only one module exists
-            
-        # Calculate remaining modules in circular sequence
-        if student_credit == 1:
-            # If starting at module 1, they've completed all modules
-            return '0'
-        else:
-            # Calculate modules from current to max, then from 1 to current-1
-            remaining = (max_credit - student_credit) + (student_credit - 1)
-            # Since we want to include the current module in the count
-            remaining = max_credit - 1 if remaining > max_credit else remaining
-            return str(remaining)
-            
-    except Exception as e:
-        print(f"Error inesperado para {student_name}: {str(e)}")
-        return 'Error'
+# Student section
+students_last_updated = get_last_updated('students')
+# print("\n\nstudents_last_updated\n", students_last_updated)
+df_loaded, _ = load_students(students_last_updated)
+print("\n\ndf_loaded\n", df_loaded)
 
-def calculate_status(row):
-    remaining_str = str(row.get('Módulos Restantes', '')).strip()
-    today = datetime.date.today()
-    
-    try:
-        # Check if student has a module end date
-        if 'fecha_fin_modulo' in row and pd.notna(row['fecha_fin_modulo']):
-            try:
-                module_end_date = pd.to_datetime(row['fecha_fin_modulo']).date()
-                if today > module_end_date and remaining_str == '0':
-                    return "Graduado"
-            except (ValueError, TypeError):
-                pass  # If date conversion fails, continue with normal status check
-        
-        # If not graduated, check remaining modules
-        if remaining_str == '0':
-            return "Último"
-        elif remaining_str.isdigit() and int(remaining_str) > 0:
-            return "En curso"
-        elif remaining_str == 'Sin fecha de inicio':
-            return "Sin fecha"
-        elif remaining_str == 'Módulo no encontrado':
-            return "Módulo no encontrado"
-        else:
-            return "Error"
-            
-    except Exception as e:
-        print(f"Error calculando estado para {row.get('nombre', 'desconocido')}: {str(e)}")
-        return "Error"
-
-def get_module_end_date(row):
-    try:
-        if pd.isna(row.get('fecha_inicio')) or not row['fecha_inicio']:
-            return None
-            
-        start_date = pd.to_datetime(row['fecha_inicio']).date()
-        user_email = st.session_state.get('email', '').replace('.', ',')
-        student_module = get_module_on_date(user_email, start_date)
-        
-        if student_module and 'end_date' in student_module:
-            return student_module['end_date']
-        return None
-    except Exception as e:
-        print(f"Error obteniendo fecha de fin para {row.get('nombre', 'desconocido')}: {str(e)}")
-        return None
-
-# --- Display and Manage Current Students ---
-if df_loaded is not None and not df_loaded.empty:
-    # First, calculate all the necessary columns
-    df_loaded['Módulos Restantes'] = df_loaded.apply(calculate_remaining_modules, axis=1)
-    df_loaded['fecha_fin_modulo'] = df_loaded.apply(get_module_end_date, axis=1)
-    df_loaded['Estado'] = df_loaded.apply(calculate_status, axis=1)
+if df_loaded is None or df_loaded.empty:
+    st.info("No hay estudiantes registrados.")
+else:
+    # Clean and format the data
+    if 'ciclo' in df_loaded.columns:
+        df_loaded = df_loaded.drop(columns=['ciclo'])
     
     # Format date columns
-    if 'fecha_inicio' in df_loaded.columns:
-        df_loaded['fecha_inicio'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.strftime('%Y-%m-%d')
-    if 'fecha_fin_modulo' in df_loaded.columns:
-        df_loaded['fecha_fin_modulo'] = pd.to_datetime(df_loaded['fecha_fin_modulo']).dt.strftime('%Y-%m-%d')
+    date_columns = ['fecha_inicio', 'fecha_fin']
+    for col in date_columns:
+        if col in df_loaded.columns:
+            df_loaded[col] = pd.to_datetime(df_loaded[col], errors='coerce').dt.strftime('%m/%d/%Y')
     
-    # Now calculate statistics
+    # Select and order columns to display
+    display_columns = ['nombre', 'email', 'telefono', 'modulo', 'fecha_inicio','modulo_fin_name', 'fecha_fin', 'modulo_fin_id' ]
+    display_columns = [col for col in display_columns if col in df_loaded.columns]
+    
+    # Rename columns for display
+    column_names = {
+        'nombre': 'Nombre',
+        'email': 'Correo Electrónico',
+        'telefono': 'Teléfono',
+        'modulo': 'Módulo (ID)',
+        'modulo_nombre': 'Módulo',
+        'fecha_inicio': 'Fecha de Inicio',
+        'fecha_fin': 'Fecha de Finalización',
+        'modulo_fin_name': 'Módulo (Final)',
+        }
+
+    current_module_id = st.session_state.get('current_module_id_for_today')
+
     total_students = len(df_loaded)
-    graduated = len(df_loaded[df_loaded['Estado'] == 'Graduado']) if 'Estado' in df_loaded.columns else 0
-    in_progress = len(df_loaded[df_loaded['Estado'] == 'En curso']) if 'Estado' in df_loaded.columns else 0
-    last_module = len(df_loaded[df_loaded['Estado'] == 'Último']) if 'Estado' in df_loaded.columns else 0
+    print("total_students", total_students)
+
+    df_loaded['_fecha_inicio_dt'] = pd.to_datetime(df_loaded['fecha_inicio']).dt.date
+    df_loaded['_fecha_fin_dt'] = pd.to_datetime(df_loaded['fecha_fin']).dt.date
+
+    # Then create formatted versions for display
+    df_loaded['fecha_inicio'] = df_loaded['_fecha_inicio_dt'].apply(lambda x: x.strftime('%m/%d/%Y'))
+    df_loaded['fecha_fin'] = df_loaded['_fecha_fin_dt'].apply(lambda x: x.strftime('%m/%d/%Y'))
+
+    today = datetime.date.today()
+    students_in_module = len(df_loaded[
+        (df_loaded['_fecha_inicio_dt'] <= today) &
+        (df_loaded['_fecha_fin_dt'] >= today)
+    ])
+    print("students_in_module", students_in_module)
+
+    students_not_in_module = total_students - students_in_module
+    print("students_not_in_module", students_not_in_module)
+
+    students_in_last_module = len(df_loaded[
+        (df_loaded['_fecha_fin_dt'] <= today)
+    ])
+
+    last_module_students = df_loaded[
+        (df_loaded['_fecha_inicio_dt'] <= today) &
+        (df_loaded['_fecha_fin_dt'] >= today) &
+        (df_loaded['_fecha_fin_dt'] == df_loaded.groupby('email')['_fecha_fin_dt'].transform('max'))
+    ]
+    df_loaded['En Ultimo Módulo'] = df_loaded['email'].apply(
+        lambda x: 'Sí' if x in last_module_students['email'].unique() else 'No'
+    )
+
+    today = pd.to_datetime(today)
+    df_loaded['_fecha_inicio_dt'] = pd.to_datetime(df_loaded['_fecha_inicio_dt'])
+    df_loaded['_fecha_fin_dt'] = pd.to_datetime(df_loaded['_fecha_fin_dt'])
+
+
+    students_in_last_module = len(df_loaded[
+        (df_loaded['_fecha_inicio_dt'] <= today) &
+        (df_loaded['_fecha_fin_dt'] >= today) &
+        (df_loaded['modulo_fin_id'] == current_module_id)
+    ])
+    print("students_in_last_module", students_in_last_module)
+
+
+    students_finished = len(df_loaded[
+        (df_loaded['_fecha_fin_dt'] <= today)
+    ])
+    print("students_finished", students_finished)
+
+
+    # ------ Highlight current module section ------
+    # This section will highlight the current module in the DataFrame
+    # Assuming df_loaded is your initial DataFrame and is already loaded
     
 
-    a, b, c, d, _ = st.columns([2,2,2,2,2])
+    # 1. Define all columns you need, including the one for logic
+    # Using a single DataFrame is simpler than maintaining two.
+    internal_columns = [
+        'nombre', 'email', 'telefono', 'modulo', 'fecha_inicio', 
+        'modulo_fin_name', 'fecha_fin', 'modulo_fin_id'
+    ]
+    df = df_loaded[internal_columns].copy()
 
-    a.metric("Total", total_students, border=True)
-    b.metric("En Curso", in_progress, border=True)
+    # 2. Rename columns for user-friendly display
+    # Note: We don't rename 'modulo_fin_id' so we can easily reference it later.
+    column_renames = {
+        'nombre': 'Nombre',
+        'email': 'Correo Electrónico',
+        'telefono': 'Teléfono',
+        'modulo': 'Módulo (ID)',
+        'fecha_inicio': 'Fecha de Inicio',
+        'fecha_fin': 'Fecha de Finalización',
+        'modulo_fin_name': 'Módulo (Final)'
+    }
+    df_renamed = df.rename(columns=column_renames)
 
-    c.metric("Último Módulo", last_module, border=True)
-    d.metric("Graduados", graduated, border=True)
-else:
-    st.subheader("Estudiantes Actuales (Total: 0) - Graduados: 0, En Curso: 0, Último Módulo: 0")
+    def highlight_row_warning(row):
+        """
+        Highlights a row in yellow if it's the current module and has already started.
+        """
+        try:
+            is_current_module = row.get('modulo_fin_id') == current_module_id
+            is_module_started = False
+            start_date_val = row.get('Fecha de Inicio')
 
-if df_loaded is not None and not df_loaded.empty:
-    # Get highest module credit for the user
-    user_email = st.session_state.get('email', '').replace('.', ',')
-    max_credit = get_highest_module_credit(user_email)
-    print(f"Max Credit: {max_credit}")
+            if pd.notna(start_date_val):
+                try:
+                    start_date = pd.to_datetime(start_date_val).date()
+                    is_module_started = start_date <= datetime.date.today()
+                except (ValueError, TypeError):
+                    is_module_started = False
+            
+            if is_current_module and is_module_started:
 
-    # Get current module info (optional, but keeping it)
-    current_module = get_module_on_date(user_email)
-    print(  f"Current Module: {current_module}")
-    current_credit = int(current_module.get('credits', 0)) if current_module and 'credits' in current_module else 0
-    print(f"Current Credit: {current_credit}")
+                return [highlight_style('warning') for _ in row]
 
-    # Calculate remaining modules for each student in circular sequence
-    # The 'calculate_remaining_modules' and 'calculate_status' functions are already defined at the top of the file
-    # We'll use those functions to calculate the remaining modules and status for each student
+        except Exception as e:
+            print(f"Error processing row in highlight_function: {row.to_dict()}")
+            print(f"Error was: {e}")
 
-    # The 'Estado' column is now calculated at the beginning of the file
-    if 'nombre' not in df_loaded.columns:
-        st.error("Los datos de los estudiantes no tienen la columna 'nombre', que es obligatoria.")
+        return ['' for _ in row]
+
+    def highlight_row_error(row):
+        """
+        Highlights a row in red if fecha_fin is in the past.
+        """
+        try:
+            # Asegúrate de que la columna exista y no sea nula antes de comparar
+            end_date_val = row.get('Fecha de Finalización') # <--- CORREGIDO
+            fecha_fin_in_past = False
+            if pd.notna(end_date_val):
+                # Convierte a fecha para una comparación segura
+                end_date = pd.to_datetime(end_date_val).date()
+                fecha_fin_in_past = end_date < datetime.date.today()
+            
+            if fecha_fin_in_past:
+                return [highlight_style('error') for _ in row]
+
+        except Exception as e:
+            print(f"Error processing row in highlight_function: {row.to_dict()}")
+            print(f"Error was: {e}")
+
+        return ['' for _ in row]
+
+    def highlight_row_success(row):
+        """
+        Highlights a row in green if fecha_inicio is in the future.
+        """
+        try:
+            # Asegúrate de que la columna exista y no sea nula antes de comparar
+            start_date_val = row.get('Fecha de Inicio') # <--- CORREGIDO
+            fecha_inicio_in_future = False
+            if pd.notna(start_date_val):
+                # Convierte a fecha para una comparación segura
+                start_date = pd.to_datetime(start_date_val).date()
+                fecha_inicio_in_future = start_date > datetime.date.today()
+            
+            if fecha_inicio_in_future:
+                return [highlight_style('success') for _ in row]
+
+        except Exception as e:
+            print(f"Error processing row in highlight_function: {row.to_dict()}")
+            print(f"Error was: {e}")
+
+        return ['' for _ in row]
+
+    # Sort the DataFrame by 'Fecha de Inicio'
+    df_renamed = df_renamed.sort_values(by='Fecha de Inicio', ascending=True)   
+
+    # 4. Decide whether to apply styling
+    if current_module_id:
+        # Apply the style to the renamed DataFrame
+        df_to_show = df_renamed.style.apply(highlight_row_warning, axis=1).apply(highlight_row_error, axis=1).apply(highlight_row_success, axis=1)
     else:
-        df_display = df_loaded.copy()
-        
-        # st.info("Puede editar los nombres de los estudiantes directamente en la tabla. Los cambios se guardarán cuando haga clic en 'Guardar Cambios'.")
-        
-        # Make a copy of the dataframe for editing
-        editable_df = df_display.copy()
-        
-        # Display the editable table
-        edited_df = st.data_editor(
-            editable_df, 
-            disabled=True,  # Make all columns editable
-            hide_index=True,
-            column_config={
-                "nombre": st.column_config.TextColumn(
-                    "Nombre del Estudiante",
-                    help="Edite el nombre del estudiante",
-                    width="medium",
-                    required=True
-                ),
-                "modulo": st.column_config.TextColumn(
-                    "Módulo de Inicio",
-                    help="Módulo del estudiante",
-                    width="small"
-                ),
-                "Módulos Restantes": st.column_config.TextColumn(
-                    "Módulos Restantes",
-                    help="Módulos restantes para completar el curso",
-                    width="small"
-                ),
-                "Estado": st.column_config.TextColumn(
-                    "Estado",
-                    help="Estado del estudiante",
-                    width="small"
-                ),
-                "fecha_inicio": st.column_config.TextColumn(
-                    "Fecha de Inicio",
-                    help="Fecha de inicio del estudiante",
-                    width="small"
-                ),
-                "fecha_fin_modulo": st.column_config.TextColumn(
-                    "Fecha de Fin",
-                    help="Fecha de finalización del módulo actual",
-                    width="small"
-                ),
-            },
-            key="students_editor"
-        )
+        # If no ID is set, just use the regular DataFrame
+        df_to_show = df_renamed
+
     
 
-elif df_loaded is not None and df_loaded.empty:
-    st.info("La lista de estudiantes está actualmente vacía. Suba un archivo para agregar estudiantes.")
-else:
-    st.info("No se encontraron datos de estudiantes o falló la carga. Por favor, suba un archivo para comenzar.")
+    # Metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Total", total_students, border=True)
+    with col2:
+        st.metric("En Curso", students_in_module, border=True)
+    with col3:
+        st.metric("Último Módulo", students_in_last_module, border=True)
+    with col4:
+        st.metric("Graduados", students_finished, border=True)
+    with col5:
+        st.metric("No comenzado", students_not_in_module - students_finished, border=True)
+
+
+
+
+# 5. Display the DataFrame and hide the column
+    st.dataframe(
+        df_to_show,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            # Setting a column's configuration to None completely removes it from display.
+            "modulo_fin_id": None,
+            # Your other column configurations for renaming headers remain the same
+            "Nombre": "Estudiante",
+            "Correo Electrónico": "Email",
+            "Teléfono": "Teléfono",
+            "Módulo (ID)": "Módulo (Inicio)",
+            "Fecha de Inicio": "Inicio",
+            "Fecha de Finalización": "Fin"
+        }
+    )
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.warning("Último módulo")
+    with col2:
+        st.error("Graduados")
+    with col3:
+        st.success("No han empezado")
+
+    # st.info("Por favor, seleccione un módulo para ver los estudiantes.")
+    # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
+    # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
+
+

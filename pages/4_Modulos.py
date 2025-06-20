@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time
 import math
-import uuid # For generating unique module IDs
-from config import setup_page, db # Assuming db is initialized in config.py
+import uuid
+from config import setup_page, db
+from utils import set_last_updated  
+from utils import load_modules
 
 # --- Page Setup and Login Check ---
 setup_page("Gestión de Módulos")
@@ -11,515 +14,317 @@ if not st.session_state.get('logged_in', False):
     st.error("Debe iniciar sesión para acceder a esta página.")
     st.info("Por favor, regrese a la página principal para iniciar sesión.")
     st.stop()
-    
-# Function to save a new module to Firebase
-def save_new_module_to_db(user_email, module_data):
+
+
+def invalidate_cache_and_rerun():
+    """Invalida el DataFrame en caché y vuelve a ejecutar la aplicación."""
+    if 'modules_df' in st.session_state:
+        del st.session_state.modules_df
+    st.rerun()
+
+def highlight_current_module(row):
+    today = datetime.date.today()
     try:
-        user_email_sanitized = user_email.replace('.', ',')
-        # Create a new reference for a module, or use module_id if provided and unique
-        # For simplicity, let's assume we push to create a new unique ID by Firebase
-        db.child("modules").child(user_email_sanitized).push(module_data)
-        return True
-    except Exception as e:
-        st.error(f"Error saving module to Firebase: {e}")
-        return False
+        start_date = datetime.datetime.strptime(row['Inicio'], '%m/%d/%Y').date()
+        end_date = datetime.datetime.strptime(row['Fin'], '%m/%d/%Y').date()
+        if start_date <= today <= end_date:
+            return ['background-color: #e6f7ff'] * len(row)
+    except:
+        pass
+    return [''] * len(row)
 
-
-def delete_module_from_db(user_email, module_key):
-    """
-    Delete a specific module from Firebase database.
-    Path: modules -> user_email_sanitized -> module_key
-    """
-    if not user_email or not module_key:
-        st.error("Error: Datos de usuario o clave de módulo no válidos.")
-        return False
-        
-    try:
-        # Sanitize email for Firebase path
-        user_path = user_email.replace('.', ',')
-        
-        # Build the specific path to the module
-        module_path = f"modules/{user_path}/{module_key}"
-        
-        # Get reference to the specific module
-        module_ref = db.child("modules").child(user_path).child(module_key)
-        
-        # First, verify the module exists
-        module_data = module_ref.get()
-        if not module_data.val():
-            st.error(f"Error: No se encontró el módulo con la clave: {module_key}")
-            return False
-            
-        # Get module name for confirmation message
-        module_info = module_data.val()
-        module_name = module_info.get('name', 'Nombre no disponible') if isinstance(module_info, dict) else 'Nombre no disponible'
-        
-        # Delete the specific module using the direct path
-        # This is the safest way to ensure we only delete the specific module
-        db.child("modules").child(user_path).child(module_key).remove()
-        
-        # Verify deletion was successful by checking if the module still exists
-        verification = db.child("modules").child(user_path).child(module_key).get()
-        if not verification.val():
-            st.toast(f"✅ Módulo eliminado: {module_name}")
-            return True
-        else:
-            st.error(f"Error: No se pudo eliminar el módulo {module_name}")
-            return False
-            
-    except Exception as e:
-        st.error(f"Error al eliminar el módulo: {str(e)}")
-        return False
-
-# Function to load all modules for the current user from Firebase.
-def load_modules(user_email_from_session):
-    if not user_email_from_session:
-        return pd.DataFrame()
-    try:
-        user_email_sanitized = user_email_from_session.replace('.', ',')
-        modules_data = db.child("modules").child(user_email_sanitized).get().val()
-
-        if not modules_data:
-            df = pd.DataFrame()
-        elif isinstance(modules_data, list):
-            processed_list = [item for item in modules_data if item is not None and isinstance(item, dict)]
-            if not processed_list:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(processed_list)
-        elif isinstance(modules_data, dict):
-            processed_list = []
-            for key, item in modules_data.items():
-                if item is not None and isinstance(item, dict):
-                    if 'module_id' not in item: # If item doesn't have its own module_id field
-                        item['module_id'] = key # Use Firebase key as module_id
-                    # Add the firebase_key to the item
-                    item['firebase_key'] = key
-                    processed_list.append(item)
-            if not processed_list:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(processed_list)
-        else:
-            st.warning(f"Unexpected data type for modules: {type(modules_data)}")
-            df = pd.DataFrame()
-        
-        # Ensure all expected columns are present in the DataFrame
-        expected_cols = ['module_id', 'name', 'description', 'credits', 'duration_weeks', 'created_at']
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = None # Add missing column and fill with None
-        
-        return df
-
-    except Exception as e:
-        st.error(f"Error loading modules from Firebase: {e}")
-        # Return an empty DataFrame with expected columns in case of error too
-        return pd.DataFrame(columns=expected_cols)
-
-
-
+# --- MAIN APP LOGIC ---
 user_email = st.session_state.get('email')
 
-# Function to calculate end date based on start date and duration
-def calculate_end_date(start_date, duration_weeks):
-    if start_date and duration_weeks:
-        return start_date + datetime.timedelta(weeks=duration_weeks)-datetime.timedelta(days=1)
-    return None
+if 'modules_df' not in st.session_state:
+    st.session_state.modules_df = None
 
-# Initialize session state for dates if not exists
-if 'module_duration_weeks' not in st.session_state:
-    st.session_state.module_duration_weeks = 1
-if 'ciclo1_inicio' not in st.session_state:
-    st.session_state.ciclo1_inicio = datetime.date.today()
-if 'ciclo2_inicio' not in st.session_state:
-    st.session_state.ciclo2_inicio = datetime.date.today()
-
-# --- FORM TO ADD NEW MODULE ---
-st.subheader("Agregar Nuevo Módulo")
-
-# Use a container for the form-like layout
-with st.container():
-    # Create two columns for Nombre and Descripción
-    col_nombre, col_desc = st.columns([1, 1])  # Descripción gets more space as it's typically longer
-    
-    with col_nombre:
-        module_name = st.text_input("Nombre del Módulo", key="new_module_name")
-    
-    with col_desc:
-        module_description = st.text_input("Descripción", key="new_module_desc")
-    
-    # Create two columns for Orden and Duración
-    col_orden, col_duracion = st.columns(2)
-    
-    with col_orden:
-        module_credits = st.number_input("Orden", min_value=1, step=1, key="new_module_credits")
-    
-    with col_duracion:
-        # Duration input with immediate update
-        module_duration_weeks = st.number_input(
-            "Duración (Semanas)", 
-            min_value=1, 
-            step=1, 
-            key="new_module_duration",
-            value=st.session_state.module_duration_weeks
-        )
-    
-    # Update duration in session state if changed
-    if module_duration_weeks != st.session_state.module_duration_weeks:
-        st.session_state.module_duration_weeks = module_duration_weeks
-        st.rerun()
-    
-    # Add date inputs for Cycle 1
-    st.subheader("Ciclo 1")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        ciclo1_inicio = st.date_input(
-            "Fecha de Inicio (MM/DD/YYYY)", 
-            key="_ciclo1_inicio",
-            value=st.session_state.ciclo1_inicio,
-            format="MM/DD/YYYY"
-        )
-        
-        # Update session state if date changes
-        if ciclo1_inicio != st.session_state.ciclo1_inicio:
-            st.session_state.ciclo1_inicio = ciclo1_inicio
-            st.rerun()
-    
-    with col2:
-        # Calculate end date using current values
-        ciclo1_fin = calculate_end_date(st.session_state.ciclo1_inicio, st.session_state.module_duration_weeks)
-        
-        # Show toast when end date changes
-        if 'prev_ciclo1_fin' not in st.session_state:
-            st.session_state.prev_ciclo1_fin = None
-            
-        # if ciclo1_fin != st.session_state.prev_ciclo1_fin and st.session_state.prev_ciclo1_fin is not None:
-        #     st.toast(f"Ciclo 1 - Nueva fecha de fin: {ciclo1_fin}")
-            
-        st.session_state.prev_ciclo1_fin = ciclo1_fin
-        
-        st.date_input(
-            "Fecha de Fin (MM/DD/YYYY)",
-            value=ciclo1_fin if ciclo1_fin else datetime.date.today(),
-            key="ciclo1_fin_display",
-            format="MM/DD/YYYY",
-            disabled=True
-        )
-    
-    # Add date inputs for Cycle 2
-    st.subheader("Ciclo 2")
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        ciclo2_inicio = st.date_input(
-            "Fecha de Inicio (MM/DD/YYYY)",
-            key="_ciclo2_inicio",
-            value=st.session_state.ciclo2_inicio,
-            format="MM/DD/YYYY"
-        )
-        
-        # Update session state if date changes
-        if ciclo2_inicio != st.session_state.ciclo2_inicio:
-            st.session_state.ciclo2_inicio = ciclo2_inicio
-            st.rerun()
-    
-    with col4:
-        # Calculate end date using current values
-        ciclo2_fin = calculate_end_date(st.session_state.ciclo2_inicio, st.session_state.module_duration_weeks)
-        
-        # Show toast when end date changes
-        if 'prev_ciclo2_fin' not in st.session_state:
-            st.session_state.prev_ciclo2_fin = None
-            
-        # if ciclo2_fin != st.session_state.prev_ciclo2_fin and st.session_state.prev_ciclo2_fin is not None:
-        #     st.toast(f"Ciclo 2 - Nueva fecha de fin: {ciclo2_fin}")
-            
-        st.session_state.prev_ciclo2_fin = ciclo2_fin
-        
-        st.date_input(
-            "Fecha de Fin (MM/DD/YYYY)",
-            value=ciclo2_fin if ciclo2_fin else datetime.date.today(),
-            key="ciclo2_fin_display",
-            format="MM/DD/YYYY",
-            disabled=True
-        )
-    
-    # Add a submit button that will handle the form submission
-    submitted_new_module = st.button("Agregar Módulo")
-    
-    if submitted_new_module and user_email:
-        if not module_name:
-            st.warning("El nombre del módulo es obligatorio.")
-        else:
-            new_module_data = {
-                'module_id': str(uuid.uuid4()), # Generate a unique ID
-                'name': module_name,
-                'description': module_description,
-                'credits': module_credits,
-                'duration_weeks': module_duration_weeks,
-                'ciclo1_inicio': ciclo1_inicio.isoformat() if 'ciclo1_inicio' in locals() else None,
-                'ciclo1_fin': calculate_end_date(ciclo1_inicio, module_duration_weeks).isoformat() if 'ciclo1_inicio' in locals() and ciclo1_inicio else None,
-                'ciclo2_inicio': ciclo2_inicio.isoformat() if 'ciclo2_inicio' in locals() else None,
-                'ciclo2_fin': calculate_end_date(ciclo2_inicio, module_duration_weeks).isoformat() if 'ciclo2_inicio' in locals() and ciclo2_inicio else None,
-                'created_at': datetime.datetime.now().isoformat()
-            }
-            if save_new_module_to_db(user_email, new_module_data):
-                st.success(f"Módulo '{module_name}' guardado exitosamente!")
-                st.rerun()
-            else:
-                st.error("No se pudo guardar el módulo.")
-    elif submitted_new_module and not user_email:
-        st.error("Error de sesión. No se pudo obtener el email del usuario.")
-
-# --- DISPLAY/EDIT EXISTING MODULES ---
+# --- MOSTRAR/EDITAR MÓDULOS EXISTENTES ---
 st.divider()
 if user_email:
-    modules_df_from_db = load_modules(user_email) # Renamed to clarify source
+    # st.button("Limpiar Caché", on_click=invalidate_cache_and_rerun)
 
-    # --- Debugging Information (Optional) ---
-    # st.subheader("Información de Depuración de Módulos (Post-Carga)")
-    # if isinstance(modules_df_from_db, pd.DataFrame):
-    #     st.write("Columnas de modules_df:", modules_df_from_db.columns.tolist() if not modules_df_from_db.empty else "DataFrame vacío")
-    #     st.write("Primeras filas de modules_df:", modules_df_from_db.head())
-    #     st.write("¿modules_df está vacío?", modules_df_from_db.empty)
-    # else:
-    #     st.write("modules_df no es un DataFrame. Tipo:", type(modules_df_from_db))
+    print("user_email", user_email)
+    print("modules_df", st.session_state.modules_df)
 
-    if modules_df_from_db.empty:
-        st.info("No hay módulos existentes para este usuario. Puede agregar nuevos módulos utilizando el formulario anterior.")
+    # Cargar desde la base de datos si el caché está vacío
+    if 'modules_df' not in st.session_state or st.session_state.modules_df is None or st.session_state.modules_df.empty:
+        with st.spinner("Cargando módulos..."):
+            st.session_state.modules_df = load_modules(user_email)
+            print("----modules_df recargado", st.session_state.modules_df)
     else:
-        st.subheader("Módulos Existentes")
-        
-        # Store original module keys to detect deletions
-        if 'firebase_key' in modules_df_from_db.columns:
-            original_module_keys = set(modules_df_from_db['firebase_key'].dropna().tolist())
-        else:
-            st.error("Error: No se encontró la columna 'firebase_key' en los datos. No se pueden gestionar eliminaciones.")
-            original_module_keys = set()
+        print("Caché no está vacío", st.session_state.modules_df)
+    
+    modules_df = st.session_state.modules_df
 
-        if 'ids_to_delete' not in st.session_state:
-            st.session_state.ids_to_delete = set()
+    if modules_df is not None and modules_df.empty:
+        st.info("No hay módulos existentes. Contacte con el administrador.")
+    else:
+        st.subheader("Módulos")
+        st.info("Los módulos se muestran en orden cronológico, con el módulo actual destacado.")
+        modules_df = modules_df.rename(columns={
+            'name': 'Nombre', 
+            'description': 'Descripción', 
+            'credits': 'Orden', 
+            'duration_weeks': 'Duración (Semanas)', 
+            'fecha_inicio_1': 'Inicio',
+            'fecha_fin_1': 'Fin'})
+        modules_df = modules_df[['Nombre', 'Descripción', 'Orden', 'Duración (Semanas)', 'Inicio', 'Fin']]
+        # Convert 'Inicio' and 'Fin' to datetime
+        modules_df['Inicio'] = pd.to_datetime(modules_df['Inicio'], errors='coerce', dayfirst=True)
+        modules_df['Fin'] = pd.to_datetime(modules_df['Fin'], errors='coerce', dayfirst=True)
 
-        # Configure date display format
-        date_format = "MM/DD/YYYY"
-        
-        editable_cols_config = {
-            "firebase_key": st.column_config.TextColumn("Firebase Key", disabled=True, help="Clave única de Firebase para este módulo"),
-            "module_id": st.column_config.TextColumn("ID del Módulo", disabled=True, help="ID único del módulo, no editable."),
-            "name": st.column_config.TextColumn("Nombre del Módulo", required=True, width="medium"),
-            "description": st.column_config.TextColumn("Descripción", width="small"),
-            "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, width="small", help="Número de orden del módulo"),
-            "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, width="small"),
-            "ciclo1_inicio": st.column_config.DateColumn("Ciclo 1 Inicio", format=date_format, width="small"),
-            "ciclo1_fin": st.column_config.DateColumn("Ciclo 1 Fin", format=date_format, width="small"),
-            "ciclo2_inicio": st.column_config.DateColumn("Ciclo 2 Inicio", format=date_format, width="small"),
-            "ciclo2_fin": st.column_config.DateColumn("Ciclo 2 Fin", format=date_format, width="small")
-        }
-        
-        display_cols_in_editor = []
-        final_column_config = {}
+        # Sort by actual datetime
+        modules_df = modules_df.sort_values('Inicio')
 
-        # Define the order of columns for display (module_id will be hidden but kept in data)
-        display_columns = [
-            'firebase_key',
-            'name', 
-            'description', 
-            'duration_weeks', 
-            'credits',
-            'ciclo1_inicio',
-            'ciclo1_fin',
-            'ciclo2_inicio',
-            'ciclo2_fin'
-        ]  # Include all date columns
-        
-        # Configure which columns are shown and how
-        for col_key in display_columns:
-            if col_key in modules_df_from_db.columns:
-                display_cols_in_editor.append(col_key)
-                if col_key in editable_cols_config:
-                    final_column_config[col_key] = editable_cols_config[col_key]
-        
-        # Ensure module_id exists in the data even if not displayed
-        if 'module_id' not in modules_df_from_db.columns:
-            st.error("Error: 'module_id' no encontrado en los datos. No se puede mostrar el editor de módulos de forma segura.")
-            st.stop()
-            
-        # Create the data editor with row deletion enabled but no adding new rows
-        columns_to_show = ['module_id', 'firebase_key'] + [col for col in display_cols_in_editor if col != 'firebase_key']
-        
-        # Make a copy of the dataframe to work with
-        df_to_edit = modules_df_from_db[columns_to_show].copy()
-        
-        # Add a delete button column
-        df_to_edit['Eliminar'] = False
-        
-        # Configure columns for the editor
-        column_config = {
-            "Eliminar": st.column_config.CheckboxColumn("Eliminar", help="Seleccione para eliminar", pinned=True),
-            **final_column_config,
-            "module_id": None,  # Hide module_id from display
-            "firebase_key": None,  # Hide firebase_key from display but keep in data
+        # Format as strings for display (after sorting)
+        for col in ['Inicio', 'Fin']:
+            if col in modules_df.columns:
+                modules_df[col] = modules_df[col].apply(lambda x: x.strftime('%m/%d/%Y') if pd.notna(x) else '')
+
+        # Ensure correct types for other columns
+        modules_df['Orden'] = modules_df['Orden'].astype(int)
+        modules_df['Duración (Semanas)'] = modules_df['Duración (Semanas)'].astype(int)
+
+        column_properties = {
+            'Duración (Semanas)': 'width: 80px;',  # Adjust the width as needed
+            'Orden': 'width: 60px;'  # Also making Orden narrower for consistency
         }
 
+        styled_df = modules_df.style.apply(highlight_current_module, axis=1)
+        st.dataframe(styled_df, hide_index=True, use_container_width=True)
         
-        # Convert date columns to datetime if they're not already
-        date_columns = ['ciclo1_inicio', 'ciclo1_fin', 'ciclo2_inicio', 'ciclo2_fin']
-        for col in date_columns:
-            if col in df_to_edit.columns:
-                df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
-        
-        # Show the editor
-        edited_df = st.data_editor(
-            df_to_edit,
-            column_config=column_config,
-            hide_index=True,
-            num_rows="fixed",  # Prevents adding new rows
-            key="modules_editor_main",
-            use_container_width=True,
-            disabled=("module_id", "firebase_key"),  # Only disable non-editable fields
-            on_change=None
-        )
-        
-        # Check for rows marked for deletion
-        if 'Eliminar' in edited_df.columns:
-            rows_to_delete = edited_df[edited_df['Eliminar'] == True]
-            if not rows_to_delete.empty:
-                st.session_state.ids_to_delete = set(rows_to_delete['firebase_key'].dropna().tolist())
-        
-        # Detect if rows were removed in the data_editor UI and no confirmation is currently active
-        if 'firebase_key' in edited_df.columns and not st.session_state.ids_to_delete:
-            current_module_keys_in_editor = set(edited_df['firebase_key'].dropna().tolist())
-            keys_to_delete_detected = original_module_keys - current_module_keys_in_editor
+        # # --- Automatic Recalculation Logic ---
+        # breaks_data = load_breaks_from_db()
+        # breaks = parse_breaks(breaks_data)
+        # today = datetime.date.today()
 
-            if keys_to_delete_detected:
-                st.session_state.ids_to_delete = keys_to_delete_detected
-                st.rerun() # Rerun to display the confirmation dialog below
-        
-        # Handle module deletion confirmation
-        if st.session_state.ids_to_delete:
-            # Create a form to handle the confirmation/cancellation
-            with st.form("delete_confirmation_form"):
-                st.warning(f"Está a punto de eliminar {len(st.session_state.ids_to_delete)} módulo(s) seleccionados en la tabla. Esta acción no se puede deshecer. ¿Está seguro?")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.form_submit_button("Sí, eliminar módulo(s)"):
-                        ids_to_process_deletion = list(st.session_state.ids_to_delete)
-                        deleted_count = 0
-                        
-                        with st.spinner("Eliminando módulos..."):
-                            for module_key in ids_to_process_deletion:
-                                if delete_module_from_db(user_email, module_key):
-                                    deleted_count += 1
-                        
-                        if deleted_count > 0:
-                            st.success(f"Se eliminaron {deleted_count} módulo(s) correctamente.")
-                        
-                        st.session_state.ids_to_delete = set()
-                        st.rerun()
-                
-                with col2:
-                    if st.form_submit_button("Cancelar eliminación"):
-                        st.session_state.ids_to_delete = set()
-                        st.rerun()
-            
-            # Stop further execution until deletion is confirmed or cancelled
-            st.stop()
-        
-        # Button to save changes to Firebase
-        if st.button("Guardar Cambios en Módulos"):
-            # --- Start of modification ---
-            # Check if a deletion confirmation is pending
-            if st.session_state.ids_to_delete:
-                st.warning("Por favor, primero confirme o cancele la eliminación pendiente de módulos (ver mensaje de advertencia arriba).")
-                st.stop() # Prevent saving other edits while deletion is pending
-            # --- End of modification ---
+        # # Find the current module's info (only for Cycle 1)
+        # current_module_start, current_module_order, current_module_name = \
+        #     find_current_module_info(modules_df, today)
 
-            # Proceed with saving edits if no deletions are pending
-            # The edited_df should reflect the current state of the table.
-            # Rows removed in UI are gone from it; actual DB deletion is handled by the confirmation dialog.
-            modules_to_save = edited_df.to_dict('records')
+        # recalculate_needed = False
+        # recalculation_reason = ""
+
+        # # Get the currently stored dates from modules_df for comparison later
+        # current_dates_df = modules_df[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1']].copy()
+        # # Convert to string to avoid issues with NaT vs None in comparison
+        # for col in ['fecha_inicio_1', 'fecha_fin_1']:
+        #     current_dates_df[col] = current_dates_df[col].astype(str)
+
+        # pivot_order_for_calc = None
+        # pivot_start_date_for_calc = None
+
+        # if current_module_start:
+        #     # If a current module is found, use its start date and order as the pivot
+        #     pivot_start_date_for_calc = current_module_start
+        #     pivot_order_for_calc = current_module_order
+        #     recalculate_needed = True
+        #     recalculation_reason = f"El cronograma se está recalculando automáticamente basado en el módulo actual: '{current_module_name}' (Orden {current_module_order}) que inició el {current_module_start.strftime('%Y-%m-%d')}."
+        # elif not modules_df.empty:
+        #     # If there are modules but none are 'current' today,
+        #     # assume the module with the lowest 'credits' order starts today as the pivot.
+        #     pivot_order_for_calc = modules_df['credits'].min()
+        #     pivot_start_date_for_calc = today # Starts from today
             
-            success_count = 0
-            error_count = 0
+        #     # Ensure selected_module_order_for_calculation has a valid name for the message
+        #     if not modules_df.empty and pivot_order_for_calc in modules_df['credits'].values:
+        #         first_module_name = modules_df[modules_df['credits'] == pivot_order_for_calc]['name'].iloc[0]
+        #     else:
+        #         first_module_name = "el Módulo 1" # Fallback if module name not found (e.g., no modules or first module order is not 1)
+
+        #     recalculate_needed = True
+        #     recalculation_reason = f"No se detectó un módulo activo hoy. Recalculando el cronograma asumiendo que {first_module_name} (Orden {pivot_order_for_calc}) comienza hoy."
+        # else:
+        #     # No modules exist, no recalculation needed yet.
+        #     recalculate_needed = False
+
+        # if recalculate_needed:
+        #     st.info(recalculation_reason, icon="ℹ️")
+        #     with st.spinner("Calculando nuevo cronograma..."):
+        #         modules_list_for_calc = modules_df.to_dict('records')
+
+        #         # Call the refactored recalculate_full_schedule
+        #         updated_modules_with_dates_list = recalculate_full_schedule(
+        #             modules_list_for_calc,
+        #             breaks,
+        #             current_module_pivot_order=pivot_order_for_calc,
+        #             current_module_pivot_start_date=pivot_start_date_for_calc
+        #         )
+                
+        #         # Convert the calculated list back to a DataFrame for comparison
+        #         calculated_df_temp = pd.DataFrame(updated_modules_with_dates_list)
+        #         calculated_df_compare = calculated_df_temp[['firebase_key', 'fecha_inicio_1', 'fecha_fin_1']].copy()
+        #         for col in ['fecha_inicio_1', 'fecha_fin_1']:
+        #             calculated_df_compare[col] = calculated_df_compare[col].astype(str)
+                
+        #         # Merge with current_dates_df to compare dates for the same firebase_key
+        #         merged_df = pd.merge(current_dates_df, calculated_df_compare, on='firebase_key', suffixes=('_current', '_calc'), how='left')
+                
+        #         # Identify if any date column has changed
+        #         dates_have_changed = False
+        #         for col_name in ['fecha_inicio_1', 'fecha_fin_1']:
+        #             # Compare if there are any differences
+        #             # Use .fillna('') to treat NaN/None/NaT consistently as empty string for comparison
+        #             if not merged_df[f"{col_name}_current"].fillna('').equals(merged_df[f"{col_name}_calc"].fillna('')):
+        #                 dates_have_changed = True
+        #                 break
+
+        #         if dates_have_changed:
+        #             update_payload = {}
+        #             for mod in updated_modules_with_dates_list:
+        #                 firebase_key = mod.get('firebase_key')
+        #                 if firebase_key:
+        #                     mod_to_save = {key: value for key, value in mod.items() if key != 'Eliminar' and pd.notna(value)}
+        #                     update_payload[firebase_key] = mod_to_save
+
+        #             if update_payload:
+        #                 try:
+        #                     user_path = user_email.replace('.', ',')
+        #                     db.child("modules").child(user_path).update(update_payload)
+        #                     st.success("¡Cronograma recalculado y guardado exitosamente!")
+        #                     time.sleep(1)
+        #                     invalidate_cache_and_rerun() # Rerun to display updated data
+        #                 except Exception as e:
+        #                     st.error(f"Error al guardar el cronograma actualizado: {e}")
+        #             else:
+        #                 st.warning("No se encontraron módulos con fechas para actualizar.")
+        #         else:
+        #             st.info("Las fechas ya están actualizadas. No se requiere guardar el cronograma.")
+        
+        # st.subheader("Módulos Existentes y Planificación")
+
+        # # --- FUNCIÓN PARA GUARDAR MÓDULOS ACTUALIZADOS ---
+        # # def save_updated_modules(updated_df):
+        # #     try:
+        # #         update_payload = {}
+        # #         for _, row in updated_df.iterrows():
+        # #             if pd.notna(row.get('firebase_key')):
+        # #                 mod_updates = row.drop('Eliminar', errors='ignore').to_dict()
+                        
+        # #                 clean_updates = {}
+        # #                 for k, v in mod_updates.items():
+        # #                     if v is None or pd.isna(v) or k == 'firebase_key':
+        # #                         continue
+                                
+        # #                     if hasattr(v, 'item'): # Convert numpy types to Python native types
+        # #                         v = v.item()
+                                
+        # #                     if isinstance(v, (datetime.date, datetime.datetime)): # Convert date objects to ISO format strings
+        # #                         v = v.isoformat()
+                                
+        # #                     clean_updates[k] = v
+                                
+        # #                 if clean_updates:  # Solo agregar si hay actualizaciones
+        # #                     update_payload[row['firebase_key']] = clean_updates
+                
+        # #         if update_payload:
+        # #             user_path = user_email.replace('.', ',')
+        # #             db.child("modules").child(user_path).update(update_payload)
+        # #             set_last_updated('modules', user_email)
+        # #             return True, "¡Cambios guardados exitosamente!"
+        # #         return False, "No hay cambios para guardar."
+        # #     except Exception as e:
+        # #         import traceback
+        # #         return False, f"Error al guardar cambios: {str(e)}\n{traceback.format_exc()}"
+
+        # # --- EDITOR DE DATOS (Definido antes de cualquier lógica que use su salida) ---
+        # df_to_edit = modules_df.copy()
+        
+        # # Define the date columns directly with the desired names (only one cycle)
+        # date_columns = ['fecha_inicio_1', 'fecha_fin_1']
+        
+        # # Convertir las columnas de fecha a tipo datetime.date para el data_editor (ya se hizo en load_modules, pero es una doble verificación)
+        # for col in date_columns:
+        #     if col in df_to_edit.columns:
+        #         try:
+        #             df_to_edit[col] = pd.to_datetime(df_to_edit[col], errors='coerce').dt.date
+        #         except Exception as e:
+        #             st.error(f"Error al convertir la columna {col} a fecha para visualización: {str(e)}")
+        # df_to_edit['Eliminar'] = False
+        
+        # # Configuración de columnas en el orden solicitado (solo un ciclo)
+        # column_config = {
+        #     "Eliminar": st.column_config.CheckboxColumn("Borrar", help="Seleccione para eliminar", default=False, width="small"),
+        #     "name": st.column_config.TextColumn("Nombre del Módulo", required=True),
+        #     "duration_weeks": st.column_config.NumberColumn("Semanas", format="%d", min_value=1, required=True, width="small"),
+        #     "credits": st.column_config.NumberColumn("Orden", format="%d", min_value=1, required=True, width="small"),
+        #     "fecha_inicio_1": st.column_config.DateColumn("Fecha Inicio", format="MM/DD/YYYY", disabled=True),
+        #     "fecha_fin_1": st.column_config.DateColumn("Fecha Fin", format="MM/DD/YYYY", disabled=True),
+        #     "module_id": None, "firebase_key": None, "description": None, "created_at": None, "updated_at": None,
+        # }
+        
+        # # Ordenar las columnas según el orden deseado (solo un ciclo)
+        # column_order = [
+        #     "Eliminar", 
+        #     "name", 
+        #     "duration_weeks", 
+        #     "credits", 
+        #     "fecha_inicio_1", 
+        #     "fecha_fin_1"
+        # ]
+        
+        # # Asegurarse de que solo se incluyan las columnas que existen en el DataFrame
+        # column_order = [col for col in column_order if col in df_to_edit.columns]
+        
+        # # Reordenar el DataFrame
+        # df_to_edit = df_to_edit[column_order + [col for col in df_to_edit.columns if col not in column_order]]
+        
+        # # Esta es la única fuente de verdad. Siempre es un DataFrame.
+        # # Usando num_rows="fixed" para evitar añadir nuevas filas
+        # edited_df = st.data_editor(
+        #     df_to_edit,
+        #     column_config=column_config,
+        #     hide_index=True,
+        #     num_rows="fixed",
+        #     key="modules_editor_main",
+        #     use_container_width=True,
+        # )
+        
+        # # Verificar cambios y eliminaciones
+        # has_changes = not edited_df.equals(df_to_edit)
+        # rows_to_delete = edited_df[edited_df['Eliminar'] == True]
+        # has_deletions = not rows_to_delete.empty
+
+        # # Crear columnas para botones
+        # col1, col2 = st.columns([1, 3])
+        
+        # # Botón "Guardar Cambios"
+        # if has_changes:
+        #     with col1:
+        #         if st.button("💾 Guardar Cambios", type="primary"):
+        #             success, message = save_updated_modules(edited_df)
+        #             if success:
+        #                 st.success(message)
+        #                 invalidate_cache_and_rerun()
+        #             else:
+        #                 st.error(message)
             
-            # Get original module IDs for comparison
-            original_module_ids = set(modules_df_from_db['module_id'].dropna().tolist()) if 'module_id' in modules_df_from_db.columns else set()
-            
-            # (The rest of your existing saving logic for edits and new modules follows here)
-            # Ensure this part correctly handles new rows (which won't have a module_id from original_module_ids)
-            # and edited rows.
-            with st.spinner('Guardando cambios...'):
-                for module in modules_to_save:
-                    try:
-                        # Prepare module data for Firebase
-                        def convert_date_to_iso(date_val):
-                            if pd.isna(date_val):
-                                return ''
-                            if isinstance(date_val, (datetime.date, datetime.datetime)):
-                                return date_val.isoformat()
-                            return str(date_val) if date_val is not None else ''
-                        
-                        def clean_value(val):
-                            if pd.isna(val):
-                                return None
-                            if isinstance(val, (int, float)) and math.isnan(val):
-                                return None
-                            return val
-                            
-                        module_data = {
-                            'name': str(module.get('name', '')),
-                            'description': str(module.get('description', '')),
-                            'credits': int(module.get('credits', 0)) if not pd.isna(module.get('credits')) else 0,
-                            'duration_weeks': int(module.get('duration_weeks', 1)) if not pd.isna(module.get('duration_weeks')) else 1,
-                            'ciclo1_inicio': convert_date_to_iso(module.get('ciclo1_inicio')),
-                            'ciclo1_fin': convert_date_to_iso(module.get('ciclo1_fin')),
-                            'ciclo2_inicio': convert_date_to_iso(module.get('ciclo2_inicio')),
-                            'ciclo2_fin': convert_date_to_iso(module.get('ciclo2_fin')),
-                            'updated_at': datetime.datetime.now().isoformat()
-                        }
-                        
-                        # Remove None values as they can cause issues with Firebase
-                        module_data = {k: v for k, v in module_data.items() if v is not None}
-                        
-                        # Get the sanitized user email path
-                        user_path = user_email.replace('.', ',')
-                        
-                        # Check if this is a new or existing module using firebase_key
-                        firebase_key = module.get('firebase_key')
-                        if firebase_key and firebase_key in original_module_keys:
-                            try:
-                                # Update existing module using firebase_key
-                                db.child("modules").child(user_path).child(firebase_key).update(module_data)
-                                success_count += 1
-                            except Exception as e:
-                                st.error(f"Error updating module {module.get('name', '')} (firebase_key: {firebase_key}): {str(e)}")
-                                error_count += 1
-                        else:
-                            try:
-                                # Add new module
-                                module_id = str(uuid.uuid4())
-                                module_data['created_at'] = datetime.datetime.now().isoformat()
-                                module_data['module_id'] = module_id
-                                db.child("modules").child(user_path).child(module_id).set(module_data)
-                                success_count += 1
-                            except Exception as e:
-                                st.error(f"Error creating module {module.get('name', '')}: {str(e)}")
-                                error_count += 1
-                        
-                    except Exception as e:
-                        st.error(f"Error al guardar el módulo {module.get('name', '')}: {str(e)}")
-                        error_count += 1
-            
-            # Show success/error message
-            if error_count == 0:
-                st.success(f"¡Se guardaron exitosamente {success_count} módulos!")
-                st.rerun()  # Refresh the data
-            else:
-                st.warning(f"Se guardaron {success_count} módulos con éxito, pero hubo {error_count} errores.")
+        # # Botón "Confirmar Eliminación"
+        # if has_deletions:
+        #     with col2:
+        #         if st.button("🗑️ Confirmar Eliminación"):
+        #             keys_to_delete = rows_to_delete['firebase_key'].tolist()
+        #             deleted_count = 0
+        #             with st.spinner("Eliminando módulos..."):
+        #                 for key in keys_to_delete:
+        #                     if delete_module_from_db(user_email, key):
+        #                         deleted_count += 1
+                    
+        #             st.success(f"{deleted_count} módulo(s) eliminados. Se recalculará el cronograma automáticamente.")
+        #             invalidate_cache_and_rerun()
+        
+        # # Mensajes de estado
+        # if has_changes:
+        #     st.warning("Tiene cambios sin guardar. Haga clic en 'Guardar Cambios' para guardar sus modificaciones.")
+        # elif has_deletions:
+        #     st.warning("Ha marcado módulos para eliminar. La eliminación es permanente.")
+        # else:
+        #     st.info("Realice cambios en la tabla y haga clic en 'Guardar Cambios' para guardar.")
+
+        # # --- Se elimina la UI de Recalculación Manual ---
+        # st.info("El cronograma de módulos se recalcula automáticamente al cargar la página o al agregar/eliminar módulos, basándose en la fecha actual y el módulo activo.", icon="💡")
+
 
 else:
-    st.error("Error de sesión: No se pudo obtener el email del usuario para cargar los módulos.")
+    st.error("Error de sesión: No se pudo obtener el email del usuario.")

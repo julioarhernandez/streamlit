@@ -1,10 +1,11 @@
 # c:\Users\JulioRodriguez\Documents\GitHub\streamlit\pages\3_Reports.py
 import streamlit as st
 import pandas as pd
+import urllib.parse
 import datetime
 from config import setup_page # Assuming db is implicitly used by load_attendance via utils
 from utils import load_attendance, load_students # Use the centralized functions
-from utils import format_date_for_display, create_filename_date_range, get_student_start_date, date_format, get_attendance_dates
+from utils import create_filename_date_range,get_student_email, get_student_start_date, get_student_phone, date_format, get_attendance_dates, get_last_updated
 
 # --- Login Check ---
 if not st.session_state.get('logged_in', False):
@@ -53,7 +54,8 @@ with col2:
 
 try:
     # Get all attendance dates
-    all_attendance = get_attendance_dates()
+    attendance_last_updated = get_last_updated('attendance')
+    all_attendance = get_attendance_dates(attendance_last_updated)
     
     if all_attendance:
         st.caption("Asistencia(s) guardada(s):")
@@ -71,7 +73,8 @@ if start_date > end_date:
 else:
     if st.button("Generar Reporte", key="generate_report_btn", type="primary"): # Translated
         # 1. Load all students
-        all_students_df, _ = load_students()
+        students_last_updated = get_last_updated('students')
+        all_students_df, _ = load_students(students_last_updated)
         if all_students_df is None or all_students_df.empty:
             st.error("No se pudo cargar la lista de estudiantes. Por favor, registre estudiantes en la página 'Estudiantes'.") # Translated
             st.stop()
@@ -93,8 +96,9 @@ else:
                 if current_date_iter.weekday() >= 5: # 0=Monday, 1=Tuesday, ..., 5=Saturday, 6=Sunday
                     current_date_iter += datetime.timedelta(days=1)
                     continue # Skip to next day if it's a weekend
-                    
-                daily_attendance_dict = load_attendance(current_date_iter) # {name: {'status': 'Present', ...}}
+
+                attendance_last_updated = get_last_updated('attendance')
+                daily_attendance_dict = load_attendance(current_date_iter, attendance_last_updated) # {name: {'status': 'Present', ...}}
                 
                 present_today_count = 0
                 if daily_attendance_dict:
@@ -123,7 +127,7 @@ else:
         
         # 3. Display Daily Summary Report
         if daily_summary_data:
-            summary_header = f"Resumen Diario de Asistencia: {start_date.strftime('%Y-%m-%d')} hasta {end_date.strftime('%Y-%m-%d')}" # Translated
+            summary_header = f"Resumen Diario de Asistencia: {date_format(start_date, '%Y-%m-%d')} hasta {date_format(end_date, '%Y-%m-%d')}" # Translated
             st.subheader(summary_header)
             df_summary_display = pd.DataFrame(daily_summary_data)
             # Reorder columns for better display, including Day Name
@@ -147,13 +151,26 @@ else:
         st.subheader("Estudiantes que Nunca Asistieron en las fechas Seleccionadas") # Clarify this includes weekends if data existed
         students_never_attended_list = sorted(list(master_student_list - students_present_in_range))
         
+        def create_whatsapp_link(phone: str, message: str) -> str:
+            phone = ''.join(filter(str.isdigit, phone))
+            encoded_message = urllib.parse.quote(message)
+            return f"https://wa.me/{phone}?text={encoded_message}"  
+
+        def create_teams_link(email: str, message: str) -> str:
+            encoded_message = urllib.parse.quote(message)
+            return f"https://teams.microsoft.com/l/chat/0/0?users={email}&message={encoded_message}"  
+
+        def get_first_name(full_name: str) -> str:
+            return full_name.strip().split()[0].capitalize()
+
         if students_never_attended_list:
             warning_msg = f"{len(students_never_attended_list)} estudiante(s) no tuvieron registros de 'Presente' en este período:"
             st.warning(warning_msg)
             
             # Get student data with start dates
             try:
-                all_students_df, _ = load_students()
+                students_last_updated = get_last_updated('students')
+                all_students_df, _ = load_students(students_last_updated)
             except Exception as e:
                 st.error(f"Error loading student data: {str(e)}")
                 all_students_df = pd.DataFrame()
@@ -162,20 +179,55 @@ else:
             never_attended_data = []
             for student_name in students_never_attended_list:
                 start_date = get_student_start_date(all_students_df, student_name)
+                phone = get_student_phone(all_students_df, student_name)
+                email = get_student_email(all_students_df, student_name)
+                student_name_only = get_first_name(student_name)
+                if phone:
+                    message = f"Hola {student_name_only}, notamos que no has asistido a clases. ¿Todo está bien? Por favor contáctanos."
+                    whatsapp_link = create_whatsapp_link(phone, message)
+                else:
+                    whatsapp_link = '#'
+
+                if email:
+                    message = f"Hola {student_name_only}, notamos que no has asistido a clases. ¿Todo está bien? Por favor contáctanos."
+                    teams_link = create_teams_link(email, message)
+                else:
+                    teams_link = '#'
+    
                 never_attended_data.append({
-                    'Nombre del Estudiante': student_name.strip(),
-                    'Fecha de Inicio': start_date
+                    'Nombre': student_name.strip(),
+                    'Inicio': start_date,
+                    'Teléfono': phone or 'No disponible',
+                    'Email': email or 'No disponible',
+                    'WhatsApp': whatsapp_link,
+                    'Teams': teams_link
                 })
-            
-            # Display the dataframe
+
             df_never_attended = pd.DataFrame(never_attended_data)
-            st.dataframe(df_never_attended, use_container_width=True, hide_index=True)
-            
+
+            # Create a copy of the DataFrame without the email column for display
+            display_columns = [col for col in df_never_attended.columns if col != 'Email']
+            df_display = df_never_attended[display_columns].copy()
+
+            # Use st.dataframe for better display
+            st.dataframe(
+                df_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    'WhatsApp': st.column_config.LinkColumn(width="small", display_text="Contactar"),
+                    'Teams': st.column_config.LinkColumn(width="small", display_text="Contactar")
+                }
+            )
             # Create CSV download
             try:
-                csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
+                # Remove only the WhatsApp and Teams columns, keep email and phone
+                df_export = df_never_attended.drop(columns=['WhatsApp', 'Teams'], errors='ignore')
                 
-                # Create filename with date range
+                # Convertir a CSV
+                csv_never_attended = df_export.to_csv(index=False, encoding='utf-8-sig')
+                
+                # Crear nombre de archivo con el rango de fechas
                 date_suffix = create_filename_date_range(start_date, end_date)
                 filename = f"nunca_asistieron{date_suffix}.csv"
                 
@@ -184,19 +236,26 @@ else:
                     data=csv_never_attended,
                     file_name=filename,
                     mime='text/csv; charset=utf-8-sig',
-                    key='download_never_attended_csv_btn'
+                    key='download_never_attended_csv_btn',
+                    type="primary"
                 )
             except Exception as e:
                 st.error(f"Error creating download file: {str(e)}")
-                # Fallback download without date range
+
+                # Intento de respaldo sin fecha
                 try:
-                    csv_never_attended = df_never_attended.to_csv(index=False, encoding='utf-8-sig')
+                    # Remove only the WhatsApp and Teams columns, keep email and phone
+                    df_export = df_never_attended.drop(columns=['WhatsApp', 'Teams'], errors='ignore')
+                    
+                    csv_never_attended = df_export.to_csv(index=False, encoding='utf-8-sig')
+                    
                     st.download_button(
                         label="Descargar Lista de Estudiantes que Nunca Asistieron",
                         data=csv_never_attended,
                         file_name="nunca_asistieron.csv",
                         mime='text/csv; charset=utf-8-sig',
-                        key='download_never_attended_csv_btn_fallback'
+                        key='download_never_attended_csv_btn_fallback',
+                        type="primary"
                     )
                 except Exception as fallback_e:
                     st.error(f"Error creating fallback download: {str(fallback_e)}")

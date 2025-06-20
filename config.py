@@ -22,6 +22,8 @@ firebase = pyrebase.initialize_app(firebaseConfig)
 auth = firebase.auth()
 db = firebase.database()
 
+@st.cache_data(ttl=300)
+
 def check_auth():
     """Check if user is logged in, redirect to login if not"""
     if 'logged_in' not in st.session_state or not st.session_state.logged_in:
