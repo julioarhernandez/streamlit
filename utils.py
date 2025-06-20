@@ -903,3 +903,17 @@ def highlight_style(theme):
         'error': "background-color: #f8d7da; color: #7d353b"
     }
     return themes.get(theme, "")
+
+
+def strip_email_and_map_course(course_email):
+    """Strips the @part of an email and maps course codes to their names."""
+    course, _ = course_email.split('@')
+    course = course.upper()
+    course_map = {
+        'CBA2': 'Computer Business Applications 2',
+        'CBA1': 'Computer Business Applications 1',
+        'PCT': 'Patient Care Technician',   
+        'DATABASE': 'Database Administration',
+        'HAVC': 'HVAC Technician'
+    }
+    return course_map.get(course, course)

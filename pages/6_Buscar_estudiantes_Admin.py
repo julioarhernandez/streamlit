@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from config import setup_page
 from utils_admin import admin_get_student_group_emails, find_students
+from utils import strip_email_and_map_course
 
 # def create_whatsapp_link(phone: str) -> str:
 #     if pd.isna(phone) or not str(phone).strip():
@@ -93,26 +94,79 @@ with st.form("student_form"):
 
 if submitted:
     if student_name:
+        # Call the find_students function to get the data
+        # 'results' DataFrame will now include the 'course_email' column
         results = find_students(student_name, modules_selected_course)
-        results = results[[
-            'nombre', 'email', 'telefono', 'modulo', 'fecha_inicio', 'modulo_fin_name', 'fecha_fin'
-        ]]
-        results = results.rename(columns={
+
+        # Strip '@iti,edu' from the 'course_email' column if it exists and is a string
+        if 'course_email' in results.columns and not results.empty:
+            # Apply the stripping operation. Use .str accessor for string methods on Series.
+            # Use .apply() with a lambda for more complex logic or error handling if needed,
+            # but .str.split().str[0] is clean here.
+            results['course_email'] = results['course_email'].apply(strip_email_and_map_course)
+            # results['course_email'] = results['course_email'].astype(str).str.upper().str.split('@').str[0]
+            # .astype(str) is important to handle potential non-string values gracefully,
+            # though our find_students should ensure it's always a string.
+
+        # Convertir fecha_inicio a formato m/d/Y
+        if 'fecha_inicio' in results.columns and not results.empty:
+            # Convert to datetime first, handling potential errors
+            results['fecha_inicio'] = pd.to_datetime(results['fecha_inicio'], errors='coerce')
+            # Now apply strftime, dropping any NaT values that resulted from 'coerce'
+            results['fecha_inicio'] = results['fecha_inicio'].dt.strftime('%m/%d/%Y').fillna('') # Fill NaN (NaT) with empty string
+
+        # Convertir fecha_fin a formato m/d/Y
+        if 'fecha_fin' in results.columns and not results.empty:
+            # Convert to datetime first, handling potential errors
+            results['fecha_fin'] = pd.to_datetime(results['fecha_fin'], errors='coerce')
+            # Now apply strftime
+            results['fecha_fin'] = results['fecha_fin'].dt.strftime('%m/%d/%Y').fillna('') # Fill NaN (NaT) with empty string
+
+
+        # Define all columns you want to display, including 'course_email'
+        # This list also defines the order of the columns.
+        columns_to_display_order = [
+            'course_email', 'nombre', 'email', 'telefono', 'modulo', 'fecha_inicio',
+            'modulo_fin_name', 'fecha_fin', 
+        ]
+
+        # Filter the DataFrame to only include the columns you want to display
+        # and ensure they exist in the DataFrame. This prevents KeyError.
+        # We'll also apply renaming to these selected columns.
+        
+        # Create a mapping for renaming columns for display
+        column_rename_map = {
             'nombre': 'Nombre',
             'email': 'Correo Electrónico',
             'telefono': 'Teléfono',
             'modulo': 'Módulo (Inicio)',
             'fecha_inicio': 'Fecha de Inicio',
             'modulo_fin_name': 'Módulo (Final)',
-            'fecha_fin': 'Fecha de Finalización'
-        })
-        hide_columns = ['modulo_fin_id', 'id', 'canvas_id', 'modulo_fin_id']
-        results = results.loc[:, ~results.columns.isin(hide_columns)]
-
+            'fecha_fin': 'Fecha de Finalización',
+            'course_email': 'Curso' # Added translation for course_email
+        }
+        
+        # Identify columns present in results AND in our desired display list
+        actual_columns_for_display = [col for col in columns_to_display_order if col in results.columns]
+        
+        # Select and rename columns in one go for clarity
         if not results.empty:
-            print(modules_selected_course)
-            st.success(f"✅ Se encontraron {len(results)} estudiante(s) con **{student_name}** en **{modules_selected_course.split('@')[0]}**")
-            st.write(results)
+            display_df = results[actual_columns_for_display].rename(columns=column_rename_map)
+        else:
+            # If results is empty, create an empty DataFrame with renamed columns
+            # to avoid errors when trying to display an empty table with specific headers.
+            empty_cols = [column_rename_map.get(col, col) for col in actual_columns_for_display]
+            display_df = pd.DataFrame(columns=empty_cols)
+
+
+        if not display_df.empty:
+            print(modules_selected_course) # Keep this for your internal debugging
+            
+            # Determine the course message for the success message
+            course_message = modules_selected_course.split('@')[0] if modules_selected_course else 'todos los cursos'
+            
+            st.success(f"✅ Se encontraron {len(display_df)} estudiante(s) con **{student_name}** en **{course_message}**")
+            st.dataframe(display_df, use_container_width=True, hide_index=True) # Using st.dataframe for better presentation
         else:
             st.warning(" ⚠️ No se encontraron estudiantes que coincidan con los criterios de búsqueda.")
     else:
