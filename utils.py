@@ -899,7 +899,7 @@ def highlight_style(theme):
     themes = {
         'warning': "background-color: #fffce7; color: #926c05",
         'info': "background-color: #1c83e11a; color: #004280",
-        'success': "background-color: #21c3541a; color: #21c3541a",
+        'success': "background-color: #21c3541a; color: #177233",
         'error': "background-color: #f8d7da; color: #7d353b"
     }
     return themes.get(theme, "")

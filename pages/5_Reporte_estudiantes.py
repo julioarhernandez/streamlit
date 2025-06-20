@@ -18,12 +18,6 @@ if not st.session_state.get('logged_in', False):
 setup_page("Reporte de Estudiantes")
 
 # Module section
-# if 'modules_df' not in st.session_state:
-#     st.session_state.modules_df = None
-
-# if 'modules_df' not in st.session_state or st.session_state.modules_df is None or st.session_state.modules_df.empty:
-#     with st.spinner("Cargando módulos..."):
-#         st.session_state.modules_df = load_modules(st.session_state.get('email'))
 
 if 'modules_df' not in st.session_state:
     st.session_state.modules_df = None
@@ -41,11 +35,11 @@ if 'current_module_id_for_today' in st.session_state and st.session_state.curren
         st.warning("No se encontró un módulo activo para hoy.")
 
 
-st.button(
-    "Limpiar Módulo Actual",
-    on_click=lambda: st.session_state.update({"current_module_id_for_today": None}),
-    help="Borra el módulo actual guardado en la sesión actual."
-)
+# st.button(
+#     "Limpiar Módulo Actual",
+#     on_click=lambda: st.session_state.update({"current_module_id_for_today": None}),
+#     help="Borra el módulo actual guardado en la sesión actual."
+# )
 
 # Student section
 students_last_updated = get_last_updated('students')
@@ -70,13 +64,6 @@ else:
     display_columns = ['nombre', 'email', 'telefono', 'modulo', 'fecha_inicio','modulo_fin_name', 'fecha_fin', 'modulo_fin_id' ]
     display_columns = [col for col in display_columns if col in df_loaded.columns]
     
-    # Get module names if modulo column exists
-    # if 'modulo' in df_loaded.columns:
-    #     user_email = st.session_state.get('email', '').replace('.', ',')
-    #     df_loaded['modulo_nombre'] = df_loaded['modulo'].apply(
-    #         lambda x: get_module_name_by_id(user_email, str(x)) if pd.notna(x) else 'Sin módulo'
-    #     )
-    
     # Rename columns for display
     column_names = {
         'nombre': 'Nombre',
@@ -89,33 +76,6 @@ else:
         'modulo_fin_name': 'Módulo (Final)',
         }
 
-    # if df_loaded is not None and not df_loaded.empty:
-    #     # First, calculate all the necessary columns
-    #     df_loaded['Módulos Restantes'] = df_loaded.apply(calculate_remaining_modules, axis=1)
-    #     df_loaded['fecha_fin_modulo'] = df_loaded.apply(get_module_end_date, axis=1)
-    #     df_loaded['Estado'] = df_loaded.apply(calculate_status, axis=1)
-    
-    # # Convert date columns to datetime objects
-    # if 'fecha_inicio' in df_loaded.columns:
-    #     df_loaded['fecha_inicio'] = pd.to_datetime(df_loaded['fecha_inicio'], errors='coerce')
-    # if 'fecha_fin_modulo' in df_loaded.columns:
-    #     df_loaded['fecha_fin_modulo'] = pd.to_datetime(df_loaded['fecha_fin_modulo'], errors='coerce')
-    
-    # # Now calculate statistics
-    # total_students = len(df_loaded)
-    # graduated = len(df_loaded[df_loaded['Estado'] == 'Graduado']) if 'Estado' in df_loaded.columns else 0
-    # in_progress = len(df_loaded[df_loaded['Estado'] == 'En curso']) if 'Estado' in df_loaded.columns else 0
-    # last_module = len(df_loaded[df_loaded['Estado'] == 'Último']) if 'Estado' in df_loaded.columns else 0
-    
-
-    # a, b, c, d, e = st.columns([2,2,2,2,2])
-
-    # a.metric("Total", total_students, border=True)
-    # b.metric("En Curso", in_progress, border=True)
-
-    # c.metric("Último Módulo", last_module, border=True)
-    # d.metric("Graduados", graduated, border=True)
-    # e.metric("No comenzado", total_students - in_progress - last_module - graduated, border=True)
     current_module_id = st.session_state.get('current_module_id_for_today')
 
     total_students = len(df_loaded)
@@ -224,7 +184,7 @@ else:
 
     def highlight_row_error(row):
         """
-        Highlights a row in yellow if it's the current module and has already started.
+        Highlights a row in red if fecha_fin is in the past.
         """
         try:
             # Asegúrate de que la columna exista y no sea nula antes de comparar
@@ -244,15 +204,58 @@ else:
 
         return ['' for _ in row]
 
+    def highlight_row_success(row):
+        """
+        Highlights a row in green if fecha_inicio is in the future.
+        """
+        try:
+            # Asegúrate de que la columna exista y no sea nula antes de comparar
+            start_date_val = row.get('Fecha de Inicio') # <--- CORREGIDO
+            fecha_inicio_in_future = False
+            if pd.notna(start_date_val):
+                # Convierte a fecha para una comparación segura
+                start_date = pd.to_datetime(start_date_val).date()
+                fecha_inicio_in_future = start_date > datetime.date.today()
+            
+            if fecha_inicio_in_future:
+                return [highlight_style('success') for _ in row]
+
+        except Exception as e:
+            print(f"Error processing row in highlight_function: {row.to_dict()}")
+            print(f"Error was: {e}")
+
+        return ['' for _ in row]
+
+    # Sort the DataFrame by 'Fecha de Inicio'
+    df_renamed = df_renamed.sort_values(by='Fecha de Inicio', ascending=True)   
+
     # 4. Decide whether to apply styling
     if current_module_id:
         # Apply the style to the renamed DataFrame
-        df_to_show = df_renamed.style.apply(highlight_row_warning, axis=1).apply(highlight_row_error, axis=1)
+        df_to_show = df_renamed.style.apply(highlight_row_warning, axis=1).apply(highlight_row_error, axis=1).apply(highlight_row_success, axis=1)
     else:
         # If no ID is set, just use the regular DataFrame
         df_to_show = df_renamed
 
-    # 5. Display the DataFrame and hide the column
+    
+
+    # Metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Total", total_students, border=True)
+    with col2:
+        st.metric("En Curso", students_in_module, border=True)
+    with col3:
+        st.metric("Último Módulo", students_in_last_module, border=True)
+    with col4:
+        st.metric("Graduados", students_finished, border=True)
+    with col5:
+        st.metric("No comenzado", students_not_in_module - students_finished, border=True)
+
+
+
+
+# 5. Display the DataFrame and hide the column
     st.dataframe(
         df_to_show,
         hide_index=True,
@@ -269,8 +272,14 @@ else:
             "Fecha de Finalización": "Fin"
         }
     )
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.warning("Último módulo")
+    with col2:
+        st.error("Graduados")
+    with col3:
+        st.success("No han empezado")
 
-    # st.error("No se ha seleccionado un módulo.")
     # st.info("Por favor, seleccione un módulo para ver los estudiantes.")
     # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
     # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
