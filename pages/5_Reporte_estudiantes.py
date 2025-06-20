@@ -5,7 +5,7 @@ from config import setup_page
 from utils import (
     load_students,
     get_module_on_date, get_highest_module_credit, get_last_updated,
-    get_module_name_by_id, load_modules
+    get_module_name_by_id, load_modules, highlight_style
 )
 
 # --- Login Check ---
@@ -49,6 +49,7 @@ st.button(
 
 # Student section
 students_last_updated = get_last_updated('students')
+# print("\n\nstudents_last_updated\n", students_last_updated)
 df_loaded, _ = load_students(students_last_updated)
 print("\n\ndf_loaded\n", df_loaded)
 
@@ -115,7 +116,8 @@ else:
     # c.metric("Último Módulo", last_module, border=True)
     # d.metric("Graduados", graduated, border=True)
     # e.metric("No comenzado", total_students - in_progress - last_module - graduated, border=True)
-    
+    current_module_id = st.session_state.get('current_module_id_for_today')
+
     total_students = len(df_loaded)
     print("total_students", total_students)
 
@@ -139,7 +141,6 @@ else:
     students_in_last_module = len(df_loaded[
         (df_loaded['_fecha_fin_dt'] <= today)
     ])
-    print("students_in_last_module", students_in_last_module)
 
     last_module_students = df_loaded[
         (df_loaded['_fecha_inicio_dt'] <= today) &
@@ -150,10 +151,29 @@ else:
         lambda x: 'Sí' if x in last_module_students['email'].unique() else 'No'
     )
 
+    today = pd.to_datetime(today)
+    df_loaded['_fecha_inicio_dt'] = pd.to_datetime(df_loaded['_fecha_inicio_dt'])
+    df_loaded['_fecha_fin_dt'] = pd.to_datetime(df_loaded['_fecha_fin_dt'])
+
+
+    students_in_last_module = len(df_loaded[
+        (df_loaded['_fecha_inicio_dt'] <= today) &
+        (df_loaded['_fecha_fin_dt'] >= today) &
+        (df_loaded['modulo_fin_id'] == current_module_id)
+    ])
+    print("students_in_last_module", students_in_last_module)
+
+
+    students_finished = len(df_loaded[
+        (df_loaded['_fecha_fin_dt'] <= today)
+    ])
+    print("students_finished", students_finished)
+
+
     # ------ Highlight current module section ------
     # This section will highlight the current module in the DataFrame
     # Assuming df_loaded is your initial DataFrame and is already loaded
-    current_module_id = st.session_state.get('current_module_id_for_today')
+    
 
     # 1. Define all columns you need, including the one for logic
     # Using a single DataFrame is simpler than maintaining two.
@@ -201,7 +221,8 @@ else:
                     is_module_started = False
             
             if is_current_module and is_module_started:
-                return ['background-color: #ffecec; color: #7d353b' for _ in row]
+
+                return [highlight_style('warning') for _ in row]
 
         except Exception as e:
             print(f"Error processing row in highlight_function: {row.to_dict()}")
@@ -239,3 +260,5 @@ else:
     # st.info("Por favor, seleccione un módulo para ver los estudiantes.")
     # st.warning("Por favor, seleccione un módulo para ver los estudiantes.")
     # st.success("Por favor, seleccione un módulo para ver los estudiantes.")
+
+

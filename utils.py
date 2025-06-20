@@ -893,3 +893,13 @@ def generate_module_schedule(modules, first_cycle_start, num_cycles):
         current_cycle_start = schedule[cicle][-1]['end_date'] + datetime.timedelta(days=1)
 
     return schedule
+
+def highlight_style(theme):
+    """Returns a CSS style string for a given theme."""
+    themes = {
+        'warning': "background-color: #fffce7; color: #926c05",
+        'info': "background-color: #1c83e11a; color: #004280",
+        'success': "background-color: #21c3541a; color: #21c3541a",
+        'error': "background-color: #f8d7da; color: #f8d7da"
+    }
+    return themes.get(theme, "")
