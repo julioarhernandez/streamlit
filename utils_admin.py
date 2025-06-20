@@ -659,92 +659,149 @@ def delete_module_from_db(course_id: str, firebase_key: str):
     except Exception as e:
         st.error(f"Error al eliminar el módulo: {str(e)}")
 
-# Your find_students function as provided
 def find_students(search_term: str, course_email: str = None) -> pd.DataFrame:
-    """
-    Busca estudiantes cuyo nombre o email contengan el término de búsqueda (insensible a mayúsculas/minúsculas).
-    Si se especifica un course_email, limita la búsqueda a ese curso.
-    
-    Args:
-        search_term: Fragmento del nombre o email a buscar.
-        course_email: Email del curso (opcional).
-        
-    Returns:
-        DataFrame con los estudiantes encontrados (puede estar vacío si no hay coincidencias).
-    """
     try:
         students_ref = db.child("students")
-        
+
+        if course_email == "":
+            course_email = None
+
         if course_email:
             snapshot = students_ref.child(course_email).child("data").get()
         else:
-            snapshot = students_ref.get()
+            snapshot = students_ref.get() 
 
+        
+        
         matched_students = []
 
-        # Define all expected columns with default values
-        # This ensures every dictionary has these keys before DataFrame creation.
-        # Use an empty string as the default to prevent NoneType errors.
         expected_columns = {
-            'nombre': '', # Default to empty string
-            'email': '',  # Default to empty string
+            'nombre': '', 
+            'email': '', 
             'telefono': '',
             'modulo': '',
             'fecha_inicio': '',
             'modulo_fin_name': '',
             'fecha_fin': '',
-            # Add any other fields you expect to display or use as columns
+            'course_email': '' 
         }
 
+        if snapshot.val() is None: 
+            return pd.DataFrame(columns=list(expected_columns.keys()))
 
-        if snapshot.each():
+        if course_email: # Scenario 1: Specific course_email was provided
+            for student_node in snapshot.each(): 
+                student_key = student_node.key() 
+                student_data_raw = student_node.val()
+
+                if not isinstance(student_data_raw, dict):
+                    continue
+                
+                student_data_raw['course_email'] = course_email # Add course_email for this specific student
+
+                student_data_processed = {key: student_data_raw.get(key, default_value) 
+                                          for key, default_value in expected_columns.items()}
+
+                nombre = str(student_data_processed.get("nombre", "")).lower()
+                email = str(student_data_processed.get("email", "")).lower()
+                
+                if search_term.lower() in nombre or search_term.lower() in email:
+                    matched_students.append(student_data_processed)
+                else:
+                    pass
+        else: # Scenario 2: No course_email provided (fetch all courses)
             for course_node in snapshot.each():
-                if course_email: # We are already at the 'data' level for a specific course
-                    student_data_raw = course_node.val()
-                    if not isinstance(student_data_raw, dict):
-                        continue
-                    
-                    # Create a new dictionary with all expected keys, defaulting to empty string
-                    student_data_processed = {key: student_data_raw.get(key, default_value) 
-                                              for key, default_value in expected_columns.items()}
+                course_key = course_node.key()
+                
+                course_data_val = course_node.val() 
+                
+                if not isinstance(course_data_val, dict):
+                    continue
+                
+                data_node = course_data_val.get("data", {})
 
-                    # Ensure 'nombre' and 'email' are strings before calling .lower()
-                    nombre = str(student_data_processed.get("nombre", "")).lower()
-                    email = str(student_data_processed.get("email", "")).lower()
-
-                    if search_term.lower() in nombre or search_term.lower() in email:
-                        matched_students.append(student_data_processed)
-
-                else: # We are iterating through courses
-                    course_key = course_node.key()
-                    data_node = course_node.val().get("data", {})
-                    
-                    if not isinstance(data_node, dict):
-                        continue
-                    
-                    for student_key, student_data_raw in data_node.items():
+                if isinstance(data_node, list):
+                    for student_data_raw in data_node: # Iterate through the list directly
                         if not isinstance(student_data_raw, dict):
                             continue
-
-                        # Create a new dictionary with all expected keys, defaulting to empty string
+                        
+                        student_data_raw['course_email'] = course_key # Add course_key
+                        
                         student_data_processed = {key: student_data_raw.get(key, default_value) 
                                                   for key, default_value in expected_columns.items()}
                         
-                        # Ensure 'nombre' and 'email' are strings before calling .lower()
                         nombre = str(student_data_processed.get("nombre", "")).lower()
                         email = str(student_data_processed.get("email", "")).lower()
 
                         if search_term.lower() in nombre or search_term.lower() in email:
                             matched_students.append(student_data_processed)
+                        else:
+                            pass
+                elif isinstance(data_node, dict): # Keep this for robustness if some 'data' nodes are dicts
+                    for student_key_in_dict, student_data_raw in data_node.items():
+                        if not isinstance(student_data_raw, dict):
+                            continue
+
+                        student_data_raw['course_email'] = course_key
+                        
+                        student_data_processed = {key: student_data_raw.get(key, default_value) 
+                                                  for key, default_value in expected_columns.items()}
+                        
+                        nombre = str(student_data_processed.get("nombre", "")).lower()
+                        email = str(student_data_processed.get("email", "")).lower()
+
+                        if search_term.lower() in nombre or search_term.lower() in email:
+                            matched_students.append(student_data_processed)
+                        else:
+                            pass
+                else:
+                    pass
+
 
         if matched_students:
-            # Create DataFrame directly from the processed list
             return pd.DataFrame(matched_students)
         else:
-            # Return an empty DataFrame with the expected columns
             return pd.DataFrame(columns=list(expected_columns.keys()))
         
     except Exception as e:
         st.error(f"Error al buscar estudiantes: {e}")
-        # Also return an empty DataFrame with expected columns on error
         return pd.DataFrame(columns=list(expected_columns.keys()))
+
+
+# students
+#     cba2@iti,edu
+#         data
+#             0
+#                 canvas_id : "6848PER"
+#                 ciclo : "1"
+#                 email : "samantha.perez@iti.edu"
+#                 fecha_fin : "2025-06-22"
+#                 fecha_inicio : "2025-06-02"
+#                 modulo : "Quickbooks I"
+#                 modulo_fin_id : "-OT7wMyoKd7BTOAnpmzr"
+#                 modulo_fin_name : "Quickbooks I"
+#                 modulo_fin_order : 12
+#                 modulo_id : "-OT7v9y4HwvBF1fScEM7"
+#                 nombre : "Samantha Perez"
+#                 telefono : "7866229067"
+#             1
+#             2
+#             3
+#             4
+#             5
+#             filename:"students.xlsx"
+#             metadata timestamp: "2025-06-20T15:55:40.866010Z"
+#     database@iti,edu
+#         data
+#             0
+#             1
+#             2
+#                 canvas_id: "CBADS"
+#                 ciclo: "1"
+#                 email: "Database-estudiante2@itit.edu"
+#                 fecha_inicio: "2025-06-12"
+#                 modulo: "moduloDatabase"
+#                 modulo_id: "-OS_541fyrIWYfFmO6tZ"
+#                 nombre: "S"
+#                 telefono: "876-098-9877"
+#             3

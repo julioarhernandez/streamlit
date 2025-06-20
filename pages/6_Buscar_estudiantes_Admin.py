@@ -70,13 +70,14 @@ with st.form("student_form"):
         student_name = st.text_input("Nombre del Estudiante")
     
     with col2:
+        course_options_with_empty = [""] + full_emails_for_options
         modules_selected_course = st.selectbox(
             "Curso",
-            options=full_emails_for_options,
-            format_func=lambda x: course_options[x]['label'],
+            options=course_options_with_empty,
+            format_func=lambda x: course_options.get(x, {}).get('label', 'Seleccione un curso') if x else "Todos los cursos",
             index=0,
-            key="course_selector" # Added key for consistency
-        )
+            key="course_selector"
+)
         
     
     with col3:
@@ -109,9 +110,10 @@ if submitted:
         results = results.loc[:, ~results.columns.isin(hide_columns)]
 
         if not results.empty:
+            print(modules_selected_course)
             st.success(f"✅ Se encontraron {len(results)} estudiante(s) con **{student_name}** en **{modules_selected_course.split('@')[0]}**")
             st.write(results)
         else:
-            st.warning("No se encontraron estudiantes que coincidan.")
+            st.warning(" ⚠️ No se encontraron estudiantes que coincidan con los criterios de búsqueda.")
     else:
         st.warning("⚠️ Por favor, complete todos los campos obligatorios.")
