@@ -259,21 +259,26 @@ def load_attendance(date: datetime.date, attendance_last_updated: str) -> dict:
 
 # --- Module Management Functions ---
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_modules_from_db(user_email: str) -> pd.DataFrame:
     """Load modules data from Firebase with caching."""
+    print("\n\nload_modules_from_db")
     try:
         user_email_sanitized = user_email.replace('.', ',')
         modules_data = db.child("modules").child(user_email_sanitized).get().val()
+        print("\n\nmodules_data", modules_data)
         
         if not modules_data:
             return pd.DataFrame(columns=['Nombre', 'Duración (semanas)'])
-            
-        # Convert to DataFrame
-        if isinstance(modules_data, list):
-            df = pd.DataFrame(modules_data)
-        else:
-            df = pd.DataFrame()
+
+        # Convert dict of dicts to list of dicts
+        modules_list = []
+        for key, value in modules_data.items():
+            if isinstance(value, dict):
+                value['firebase_key'] = key  # optional: store Firebase key
+                modules_list.append(value)
+
+        df = pd.DataFrame(modules_list)
         return df
         
     except Exception as e:
@@ -281,10 +286,10 @@ def load_modules_from_db(user_email: str) -> pd.DataFrame:
         return pd.DataFrame(columns=['Nombre', 'Duración (semanas)'])
 
 def load_modules(user_email: str) -> pd.DataFrame:
-    """Load modules from session if available, otherwise from database."""
-    if 'modules' not in st.session_state:
-        st.session_state.modules = load_modules_from_db(user_email)
-    return st.session_state.modules
+    if 'modules_df' not in st.session_state or st.session_state.modules_df is None:
+        modules = load_modules_from_db(user_email)
+        st.session_state.modules_df = modules if modules is not None else pd.DataFrame()
+    return st.session_state.modules_df
 
 def update_modules_in_session(updated_df: pd.DataFrame):
     """Update modules in session state."""
