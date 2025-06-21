@@ -113,7 +113,7 @@ def get_current_students_data(course_email):
     """Loads student data for the given course email, optimized with caching."""
     if not course_email:
         return pd.DataFrame(), None # Return empty DataFrame if no course is selected
-    st.info(f"Cargando estudiantes para el curso: {course_email.capitalize().split('@')[0]}...")
+    # st.info(f"Cargando estudiantes para el curso: {course_email.capitalize().split('@')[0]}...")
     df, timestamp = admin_load_students(course_email)
     st.success("Estudiantes cargados exitosamente." if df is not None else "Error al cargar estudiantes.")
     return df, timestamp
@@ -146,7 +146,7 @@ if selected_course: # Only show module selection if a course is selected
 
     try:
         modules_last_updated = get_last_updated('modules', selected_course)
-        st.info(f"Módulos actualizados el: {modules_last_updated}")
+        # st.info(f"Módulos actualizados el: {modules_last_updated}")
         module_options = get_available_modules(selected_course, modules_last_updated)
         st.session_state.module_data = module_options
         # print("\n\nmodule_data", st.session_state.module_data)
@@ -428,7 +428,12 @@ if 'text_area_input' in st.session_state and st.session_state.text_area_input an
                 if skipped_names:
                     st.caption(f"Nombres omitidos (ya existen o duplicados): {', '.join(skipped_names)}")
             else:
-                new_students_df = pd.DataFrame(students_to_add_list)
+                students_to_add_list_copy = [student_data.copy() for student_data in students_to_add_list]
+                for student_data in students_to_add_list_copy:
+                    student_data.pop('whatsapp', None)
+                    student_data.pop('teams', None)
+
+                new_students_df = pd.DataFrame(students_to_add_list_copy)
                 updated_students_df = pd.concat([current_students_df, new_students_df], ignore_index=True)
 
                 # print("\n\nupdated_students_df", updated_students_df)
@@ -525,13 +530,15 @@ if df_loaded is not None and not df_loaded.empty:
                 "WhatsApp",
                 help="Contactar por WhatsApp",
                 width="small",
-                display_text="💬"
+                display_text="💬",
+                disabled=True
             ),
             "teams": st.column_config.LinkColumn(
                 "Teams",
                 help="Contactar por Teams",
                 width="small",
-                display_text="💻"
+                display_text="💻",
+                disabled=True
             ),
             "modulo": st.column_config.TextColumn(
                 "Módulo (Inicio)",
