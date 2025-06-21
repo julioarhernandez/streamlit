@@ -72,6 +72,13 @@ else:
     st.warning("No se encontraron cursos disponibles.")
     modules_selected_course = None # Ensure it's explicitly None if no courses
 
+# --- Mapping for status selectbox ---
+status_mapping = {
+    "- No seleccionado -": "all",
+    "Graduado": "graduated",
+    "En curso": "in_progress",
+    "No iniciado": "not_started"
+}
 
 # Usamos un formulario para capturar los datos
 with st.form("student_form"):
@@ -90,17 +97,22 @@ with st.form("student_form"):
             format_func=lambda x: course_options.get(x, {}).get('label', 'Seleccione un curso') if x else "Todos los cursos",
             index=0,
             key="course_selector"
-)
+        )
         
     
     with col3:
-        status = st.selectbox(
-            "Estatus",
-            options=["- No seleccionado -","Graduado", "En curso", "No iniciado"]
+        # Your new selectbox for status
+        selected_display_status = st.selectbox(
+            "Estado",
+            options=list(status_mapping.keys()), # Use the display names as options
+            index=2,
+            key="status_selector"
         )
+        # Get the internal status value
+        selected_internal_status = status_mapping[selected_display_status]
     
     # Botón para enviar el formulario
-    submitted = st.form_submit_button("Buscar")
+    submitted = st.form_submit_button("Buscar Estudiante", type="primary")
 
 
 
@@ -108,7 +120,7 @@ if submitted:
     if student_name:
         # Call the find_students function to get the data
         # 'results' DataFrame will now include the 'course_email' column
-        results = find_students(student_name, modules_selected_course)
+        results = find_students(student_name, modules_selected_course, selected_internal_status)
 
         # Add WhatsApp Link column
         if 'telefono' in results.columns and not results.empty:
@@ -195,7 +207,7 @@ if submitted:
             # Determine the course message for the success message
             course_message = modules_selected_course.split('@')[0] if modules_selected_course else 'todos los cursos'
             
-            st.success(f"✅ Se encontraron {len(display_df)} estudiante(s) con **{student_name}** en **{course_message}**")
+            st.success(f"✅ Se encontraron {len(display_df)} estudiante(s) con **{student_name}** en **{course_message}** con estado **{selected_display_status}**")
 
             column_configuration = {
                 "WhatsApp": st.column_config.LinkColumn(

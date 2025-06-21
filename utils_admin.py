@@ -659,114 +659,137 @@ def delete_module_from_db(course_id: str, firebase_key: str):
     except Exception as e:
         st.error(f"Error al eliminar el módulo: {str(e)}")
 
-def find_students(search_term: str, course_email: str = None) -> pd.DataFrame:
+def find_students(search_term: str, course_email: str = None, status: str = "in_progress") -> pd.DataFrame:
+    """
+    Fetches student data from Firebase, applies name/email search and status filters.
+
+    Args:
+        search_term (str): The name or email substring to search for.
+        course_email (str, optional): The specific course email to filter by.
+                                       Defaults to None (search all courses).
+        status (str, optional): The enrollment status to filter by ("all", "in_progress", "graduated", "not_started").
+                                Defaults to "all".
+
+    Returns:
+        pd.DataFrame: A DataFrame of matched students with expected columns.
+    """
     try:
         students_ref = db.child("students")
 
         if course_email == "":
             course_email = None
 
+        raw_students_data = []
+
         if course_email:
+            # Fetch data for a specific course
             snapshot = students_ref.child(course_email).child("data").get()
+            if snapshot.val() is not None:
+                # Firebase can return dict (if a single item) or list (if multiple items)
+                # Ensure we handle both cases correctly
+                if isinstance(snapshot.val(), dict):
+                    # If data is a dictionary where keys are student IDs/indices
+                    for student_key, student_data_raw in snapshot.val().items():
+                        if isinstance(student_data_raw, dict):
+                            student_data_raw['course_email'] = course_email # Add course_email
+                            raw_students_data.append(student_data_raw)
+                elif isinstance(snapshot.val(), list):
+                    # If data is a list (e.g., if pushed as an array in Firebase)
+                    for student_data_raw in snapshot.val():
+                        if isinstance(student_data_raw, dict):
+                            student_data_raw['course_email'] = course_email # Add course_email
+                            raw_students_data.append(student_data_raw)
         else:
-            snapshot = students_ref.get() 
+            # Fetch data for all courses
+            all_courses_snapshot = students_ref.get()
+            if all_courses_snapshot.val() is not None:
+                for course_node in all_courses_snapshot.each():
+                    course_key = course_node.key()
+                    course_data_val = course_node.val()
 
-        
-        
-        matched_students = []
+                    if isinstance(course_data_val, dict):
+                        data_node = course_data_val.get("data", {})
+                        if isinstance(data_node, dict):
+                            # Students are dictionaries within "data"
+                            for student_key, student_data_raw in data_node.items():
+                                if isinstance(student_data_raw, dict):
+                                    student_data_raw['course_email'] = course_key
+                                    raw_students_data.append(student_data_raw)
+                        elif isinstance(data_node, list):
+                            # Students are a list within "data"
+                            for student_data_raw in data_node:
+                                if isinstance(student_data_raw, dict):
+                                    student_data_raw['course_email'] = course_key
+                                    raw_students_data.append(student_data_raw)
 
+        # Define expected columns and their default values
         expected_columns = {
-            'nombre': '', 
-            'email': '', 
+            'nombre': '',
+            'email': '',
             'telefono': '',
             'modulo': '',
             'fecha_inicio': '',
             'modulo_fin_name': '',
             'fecha_fin': '',
-            'course_email': '' 
+            'course_email': ''
         }
 
-        if snapshot.val() is None: 
-            return pd.DataFrame(columns=list(expected_columns.keys()))
-
-        if course_email: # Scenario 1: Specific course_email was provided
-            for student_node in snapshot.each(): 
-                student_key = student_node.key() 
-                student_data_raw = student_node.val()
-
-                if not isinstance(student_data_raw, dict):
-                    continue
-                
-                student_data_raw['course_email'] = course_email # Add course_email for this specific student
-
-                student_data_processed = {key: student_data_raw.get(key, default_value) 
-                                          for key, default_value in expected_columns.items()}
-
-                nombre = str(student_data_processed.get("nombre", "")).lower()
-                email = str(student_data_processed.get("email", "")).lower()
-                
-                if search_term.lower() in nombre or search_term.lower() in email:
-                    matched_students.append(student_data_processed)
-                else:
-                    pass
-        else: # Scenario 2: No course_email provided (fetch all courses)
-            for course_node in snapshot.each():
-                course_key = course_node.key()
-                
-                course_data_val = course_node.val() 
-                
-                if not isinstance(course_data_val, dict):
-                    continue
-                
-                data_node = course_data_val.get("data", {})
-
-                if isinstance(data_node, list):
-                    for student_data_raw in data_node: # Iterate through the list directly
-                        if not isinstance(student_data_raw, dict):
-                            continue
-                        
-                        student_data_raw['course_email'] = course_key # Add course_key
-                        
-                        student_data_processed = {key: student_data_raw.get(key, default_value) 
-                                                  for key, default_value in expected_columns.items()}
-                        
-                        nombre = str(student_data_processed.get("nombre", "")).lower()
-                        email = str(student_data_processed.get("email", "")).lower()
-
-                        if search_term.lower() in nombre or search_term.lower() in email:
-                            matched_students.append(student_data_processed)
-                        else:
-                            pass
-                elif isinstance(data_node, dict): # Keep this for robustness if some 'data' nodes are dicts
-                    for student_key_in_dict, student_data_raw in data_node.items():
-                        if not isinstance(student_data_raw, dict):
-                            continue
-
-                        student_data_raw['course_email'] = course_key
-                        
-                        student_data_processed = {key: student_data_raw.get(key, default_value) 
-                                                  for key, default_value in expected_columns.items()}
-                        
-                        nombre = str(student_data_processed.get("nombre", "")).lower()
-                        email = str(student_data_processed.get("email", "")).lower()
-
-                        if search_term.lower() in nombre or search_term.lower() in email:
-                            matched_students.append(student_data_processed)
-                        else:
-                            pass
-                else:
-                    pass
-
-
-        if matched_students:
-            return pd.DataFrame(matched_students)
+        # Create DataFrame from raw data, ensuring all expected columns are present
+        if raw_students_data:
+            df = pd.DataFrame(raw_students_data)
+            # Fill missing expected columns with empty strings
+            for col in expected_columns:
+                if col not in df.columns:
+                    df[col] = expected_columns[col]
+            # Ensure column order
+            df = df[list(expected_columns.keys())]
         else:
             return pd.DataFrame(columns=list(expected_columns.keys()))
-        
-    except Exception as e:
-        st.error(f"Error al buscar estudiantes: {e}")
-        return pd.DataFrame(columns=list(expected_columns.keys()))
 
+        # Convert date columns to datetime objects for filtering
+        df['_fecha_inicio_dt'] = pd.to_datetime(df['fecha_inicio'], errors='coerce')
+        df['_fecha_fin_dt'] = pd.to_datetime(df['fecha_fin'], errors='coerce')
+        today_dt = pd.Timestamp(datetime.date.today())
+
+        # --- Apply Filters ---
+        filtered_df = df.copy()
+
+        # 1. Apply search_term filter
+        if search_term:
+            search_term_lower = search_term.lower()
+            filtered_df = filtered_df[
+                filtered_df['nombre'].astype(str).str.lower().str.contains(search_term_lower) |
+                filtered_df['email'].astype(str).str.lower().str.contains(search_term_lower)
+            ]
+
+        # 2. Apply status filter
+        if status == "in_progress":
+            filtered_df = filtered_df[
+                (filtered_df['_fecha_inicio_dt'].notna()) &
+                (filtered_df['_fecha_fin_dt'].notna()) &
+                (filtered_df['_fecha_inicio_dt'] <= today_dt) &
+                (filtered_df['_fecha_fin_dt'] >= today_dt)
+            ]
+        elif status == "graduated":
+            filtered_df = filtered_df[
+                (filtered_df['_fecha_fin_dt'].notna()) &
+                (filtered_df['_fecha_fin_dt'] < today_dt)
+            ]
+        elif status == "not_started":
+            filtered_df = filtered_df[
+                (filtered_df['_fecha_inicio_dt'].notna()) &
+                (filtered_df['_fecha_inicio_dt'] > today_dt)
+            ]
+        # No 'else' needed for "all" as it means no status filtering applied
+
+        return filtered_df.drop(columns=['_fecha_inicio_dt', '_fecha_fin_dt'], errors='ignore')
+
+    except Exception as e:
+        # It's better to log the full traceback for debugging in production
+        # import traceback
+        # st.error(f"Error al buscar estudiantes: {e}\n{traceback.format_exc()}")
+        st.error(f"Error al buscar estudiantes: {e}")
+        return pd.DataFrame(columns=list(expected_columns.keys())) # Ensure expected_columns is defined or passed
 
 # students
 #     cba2@iti,edu
